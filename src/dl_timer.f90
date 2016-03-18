@@ -309,8 +309,8 @@ MODULE dl_timer
       end select
 
       ! Check whether any of our timed regions have a non-unity
-      ! no. of repeats
-      have_repeats = .false.
+      ! no. of repeats.
+      have_repeats = .FALSE.
       do jt = 1, nThreads, 1
          if( ANY( timer(1:itimerCount(jt),jt)%nrepeat > 1) )then
             have_repeats = .TRUE.
@@ -340,9 +340,11 @@ MODULE dl_timer
       WRITE(*,"('Region',26x,'Counts      Total         Average      Error')")
       WRITE(*,"(67('-'))")
       DO jt = 1, nThreads, 1
-         IF(jt > 1) WRITE(*, "(34('- '))")
 
-         IF(nThreads > 1)WRITE(*," ('Thread ',I3)") jt
+         IF(itimerCount(jt) > 0)THEN
+            if(jt > 1) WRITE(*, "(34('- '))")
+            WRITE(*," ('Thread ',I3)") jt-1
+         end if
 
          DO ji=1,itimerCount(jt),1
 
@@ -379,8 +381,11 @@ MODULE dl_timer
      WRITE(*,"('Region',26x,'Counts      Total         Average    Average/repeat   Error')")
      WRITE(*,"(83('-'))")
      DO jt = 1, nThreads, 1
-        IF(jt > 1) WRITE(*,"(41('- '))")
-        IF(nThreads > 1)WRITE(*," ('Thread ',I3)") jt
+
+        if(itimerCount(jt) > 0)then
+           if(jt > 1) WRITE(*, "(34('- '))")
+           WRITE(*," ('Thread ',I3)") jt-1
+        end if
 
         DO ji=1,itimerCount(jt),1
 
