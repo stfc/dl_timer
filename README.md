@@ -17,6 +17,12 @@ environment variables:
 * F90FLAGS - flags to pass to the compiler, e.g. -g
 * OMPFLAGS - the flag(s) required to enable OpenMP with the chosen compiler
 
+e.g. to build with Gnu Fortran I use:
+
+    export F90=gfortran
+    export F90FLAGS=-g
+    export OMPFLAGS=-fopenmp
+
 ## Examples ##
 
 There are examples of the usage of dl_timer in the test directory.
