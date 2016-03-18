@@ -1,0 +1,19 @@
+By default it's configured to use the OpenMP timing routine (as that has consistently good resolution) so you'll need to at least link against OpenMP. You can change it to use the intrinsic Fortran timer or the Intel RDTSC processor counter. I think the latter might be broken at the minute though.
+
+Use it like so:
+
+  use timing_mod
+
+  ! Initialise timing system
+  call timer_init()
+
+
+  CALL timer_start('Time-stepping', itimer0 )
+
+   ... do some stuff
+
+  ! Stop the timer for the time-stepping section
+  call timer_stop(itimer0)
+
+  CALL timer_report()
+
