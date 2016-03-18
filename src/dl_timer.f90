@@ -292,6 +292,21 @@ MODULE dl_timer
       IMPLICIT none
       INTEGER       :: jt
       LOGICAL       :: have_repeats
+      CHARACTER(len=120) :: timer_str = ""
+
+      select case(base_timer)
+      case(OMP_TIMER)
+         write(timer_str, &
+               "('Timed using OpenMP omp_get_wtime. Units are seconds.')")
+      case(RDTSC_TIMER)
+         write(timer_str, &
+              "('Timed using Intel Time Stamp Counter. Units are counts.')")
+      case(INTRINSIC_TIMER)
+         write(timer_str, &
+              "('Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
+      case default
+         return
+      end select
 
       ! Check whether any of our timed regions have a non-unity
       ! no. of repeats
@@ -304,33 +319,28 @@ MODULE dl_timer
       end do
 
       if(have_repeats)then
-         call timer_report_with_repeats()
+         call timer_report_with_repeats(timer_str)
       else
-         call timer_report_no_repeats()
+         call timer_report_no_repeats(timer_str)
       end if
 
     end SUBROUTINE timer_report
 
     !==========================================================================
 
-    subroutine timer_report_no_repeats()
+    subroutine timer_report_no_repeats(timer_str)
       implicit none
+      CHARACTER(len=*), INTENT(in) :: timer_str
       INTEGER       :: ji, jt
       REAL(KIND=wp) :: wtime
 
       WRITE(*,"(/'====================== Timing report ==============================')")
-      IF(use_rdtsc_timer)THEN
-         WRITE(*," ('    Timed using Intel Time Stamp Counter. Units are counts.')")
-      ELSE
-         WRITE(*," (' Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
-      END IF
-      WRITE(*," ('-------------------------------------------------------------------')")
-      WRITE(*," ('Region',26x,'Counts      Total         Average      Error')")
-      WRITE(*," ('-------------------------------------------------------------------')")
+      WRITE(*,"(4x, (A))") TRIM(timer_str)
+      WRITE(*,"(67('-'))")
+      WRITE(*,"('Region',26x,'Counts      Total         Average      Error')")
+      WRITE(*,"(67('-'))")
       DO jt = 1, nThreads, 1
-         IF(jt > 1)THEN
-            WRITE(*," ('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -')")
-         END IF
+         IF(jt > 1) WRITE(*, "(34('- '))")
 
          IF(nThreads > 1)WRITE(*," ('Thread ',I3)") jt
 
@@ -349,54 +359,50 @@ MODULE dl_timer
                             time_err(timer(ji,jt)%count)
          END DO
       END DO
-      WRITE(*," ('===================================================================')")
+      WRITE(*," (67('='))")
 
    END SUBROUTINE timer_report_no_repeats
 
    !==========================================================================
 
-   SUBROUTINE timer_report_with_repeats()
-      IMPLICIT none
-      INTEGER       :: ji, jt
-      REAL(KIND=wp) :: wtime, tmean, trepeat
+   SUBROUTINE timer_report_with_repeats(timer_str)
+     !> Write the timing report for the case where one or more regions have an
+     !! implicit repeat > 1.
+     IMPLICIT none
+     CHARACTER(len=*), INTENT(in) :: timer_str
+     INTEGER       :: ji, jt
+     REAL(KIND=wp) :: wtime, tmean, trepeat
 
-      WRITE(*,"(/34('='),' Timing report ',34('='))")
-      IF(use_rdtsc_timer)THEN
-         WRITE(*," ('    Timed using Intel Time Stamp Counter. Units are counts.')")
-      ELSE
-         WRITE(*," (' Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
-      END IF
-      WRITE(*,"(83('-'))")
-      WRITE(*,"('Region',26x,'Counts      Total         Average    Average/repeat   Error')")
-      WRITE(*,"(83('-'))")
-      DO jt = 1, nThreads, 1
-         IF(jt > 1)THEN
-            WRITE(*,"(41('- '))")
-         END IF
+     WRITE(*,"(/34('='),' Timing report ',34('='))")
+     WRITE(*,"(4x,(A))") TRIM(timer_str)
+     WRITE(*,"(83('-'))")
+     WRITE(*,"('Region',26x,'Counts      Total         Average    Average/repeat   Error')")
+     WRITE(*,"(83('-'))")
+     DO jt = 1, nThreads, 1
+        IF(jt > 1) WRITE(*,"(41('- '))")
+        IF(nThreads > 1)WRITE(*," ('Thread ',I3)") jt
 
-         IF(nThreads > 1)WRITE(*," ('Thread ',I3)") jt
+        DO ji=1,itimerCount(jt),1
 
-         DO ji=1,itimerCount(jt),1
+           IF(use_rdtsc_timer)THEN
+              wtime = timer(ji,jt)%total
+           ELSE
+              wtime = time_in_s(0._wp,timer(ji,jt)%total)
+           END IF
 
-            IF(use_rdtsc_timer)THEN
-               wtime = timer(ji,jt)%total
-            ELSE
-               wtime = time_in_s(0._wp,timer(ji,jt)%total)
-            END IF
-
-            ! Mean time spent in timed region
-            tmean = wtime/REAL(timer(ji,jt)%count)
-            ! Mean time spent in the repeated section of code in the
-            ! timed region
-            trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
-            ! Truncate the label to 32 chars for table-formatting purposes
-            WRITE(*,"((A),1x,I6,1x,E13.6,1x,E13.6,1x,E13.6,1x,E13.6)")    &
-                            timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
-                            wtime, tmean, trepeat, & 
-                            ! Error estimate using quadrature formula for
-                            ! the time spent in just one of the nrepeat 
-                            ! regions - use product formula
-                            trepeat*time_err(timer(ji,jt)%count)/tmean
+           ! Mean time spent in timed region
+           tmean = wtime/REAL(timer(ji,jt)%count)
+           ! Mean time spent in the repeated section of code in the
+           ! timed region
+           trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
+           ! Truncate the label to 32 chars for table-formatting purposes
+           WRITE(*,"((A),1x,I6,1x,E13.6,1x,E13.6,1x,E13.6,1x,E13.6)")  &
+                timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
+                wtime, tmean, trepeat,                                 & 
+                ! Error estimate using quadrature formula for
+                ! the time spent in just one of the nrepeat 
+                ! regions - use product formula
+                trepeat*time_err(timer(ji,jt)%count)/tmean
          END DO
       END DO
       WRITE(*,"(83('='))")
@@ -408,7 +414,7 @@ MODULE dl_timer
    FUNCTION time_err(ncount)
      implicit none
      integer :: ncount
-     real :: time_err
+     real(wp) :: time_err
      ! Calculate the error in the mean time duration using the reported
      ! granularity of the clock and quadrature formula
      ! Every time we time a region we get a start time and a stop time.
