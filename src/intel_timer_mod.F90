@@ -1,3 +1,5 @@
+!> Provides an interface to the Intel-specifc getticks routine which
+!! queries the Time-Stamp Counter (rdtsc) register.
 MODULE intel_timer_mod
    USE iso_c_binding
    IMPLICIT none

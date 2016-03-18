@@ -6,6 +6,29 @@ MODULE dl_timer
 
    PRIVATE
 
+   !-------------------------------------------------------------------
+   ! Define some constants to identify the different timers that
+   ! we support
+
+   ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
+   INTEGER, PARAMETER :: RDTSC_TIMER = 0
+   ! Use the OpenMP wtime routine (must link against OpenMP)
+   INTEGER, PARAMETER :: OMP_TIMER=1
+   ! Use the Fortran intrinsic timer (precision may be limited)
+   INTEGER, PARAMETER :: INTRINSIC_TIMER=2
+
+   !-------------------------------------------------------------------
+   ! Section that configures which timer is used
+
+   !> Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
+   !! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
+   !! is used.
+   LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
+   !> Which timer type to use by default
+   INTEGER :: base_timer = OMP_TIMER
+
+   !------------------------------------------------------------------
+   ! Type definitions
    !: double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
@@ -50,19 +73,6 @@ MODULE dl_timer
    TYPE(timer_type), ALLOCATABLE, SAVE, DIMENSION(:,:) :: timer
 
    INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
-
-   ! Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
-   ! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
-   ! is used.
-   LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
-   ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
-   INTEGER, PARAMETER :: RDTSC_TIMER = 0
-   ! Use the OpenMP wtime routine (must link against OpenMP)
-   INTEGER, PARAMETER :: OMP_TIMER=1
-   ! Use the Fortran intrinsic timer (precision may be limited)
-   INTEGER, PARAMETER :: INTRINSIC_TIMER=2
-   ! Which of these timers to use by default
-   INTEGER :: base_timer = OMP_TIMER
    
    !-------------------------------------------------------------------
    ! Publicly-accessible routines
