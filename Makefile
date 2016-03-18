@@ -5,7 +5,7 @@ SRC_DIR = src
 # Location of the test code
 TEST_DIR = test
 
-${DLT_LIB}:
+${DLT_LIB}: ${SRC_DIR}/*.?90
 	make --directory=${SRC_DIR} LIB_NAME=${DLT_LIB}
 	mv ${SRC_DIR}/${DLT_LIB} .
 

@@ -1,6 +1,6 @@
 INC_DIR = ../src
 
-timer_test.exe: timer_test.o
+timer_test.exe: ../dl_timer_lib.a timer_test.o
 	${F90} ${OMPFLAGS} timer_test.o ../dl_timer_lib.a -o $@
 
 test: timer_test.exe
