@@ -1,4 +1,4 @@
-MODULE timing_mod
+MODULE dl_timer
 
   USE intel_timer_mod
 !$ USE omp_lib
@@ -410,4 +410,4 @@ MODULE timing_mod
 
 !============================================================================
 
-END MODULE timing_mod
+END MODULE dl_timer
