@@ -6,17 +6,23 @@ SRC_DIR = src
 TEST_DIR = test
 
 ${DLT_LIB}: ${SRC_DIR}/*.?90
-	make --directory=${SRC_DIR} LIB_NAME=${DLT_LIB}
+	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB}
 	mv ${SRC_DIR}/${DLT_LIB} .
 
-test: ${DLT_LIB}
-	make --directory=test test
+# The directory 'test' does actually exist but this target does not
+# create or update it - therefore mark it as phony.
+.PHONY: test
+test:
+	${MAKE} ${DLT_LIB}
+	${MAKE} --directory=test test
 
+.PHONY: clean
 clean:
-	make --directory=${SRC_DIR} clean
-	make --directory=${TEST_DIR} clean
+	${MAKE} --directory=${SRC_DIR} clean
+	${MAKE} --directory=${TEST_DIR} clean
 
+.PHONY: allclean
 allclean:
-	make --directory=${SRC_DIR} allclean
-	make --directory=${TEST_DIR} allclean
+	${MAKE} --directory=${SRC_DIR} allclean
+	${MAKE} --directory=${TEST_DIR} allclean
 	rm -f ${DLT_LIB} *~
