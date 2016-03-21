@@ -7,9 +7,13 @@ timer_test.exe: ../dl_timer_lib.a timer_test.o
 timer_test_no_repeat.exe: ../dl_timer_lib.a timer_test_no_repeat.o
 	${F90} ${OMPFLAGS} timer_test_no_repeat.o ../dl_timer_lib.a -o $@
 
-test: timer_test.exe timer_test_no_repeat.exe
+timer_test_omp.exe: ../dl_timer_lib.a timer_test_omp.o
+	${F90} ${OMPFLAGS} timer_test_omp.o ../dl_timer_lib.a -o $@
+
+test: timer_test.exe timer_test_no_repeat.exe timer_test_omp.exe
 	./timer_test.exe
 	./timer_test_no_repeat.exe
+	./timer_test_omp.exe
 
 clean:
 	rm -f *.o *~
@@ -17,6 +21,9 @@ clean:
 allclean: clean
 	rm -f *.exe
 
+# This test case must be compiled with OpenMP enabled
+timer_test_omp.o: timer_test_omp.f90
+	$(F90) $(F90FLAGS) $(OMPFLAGS) -I$(INC_DIR) -c $<
 
 %.o: %.f90
 	$(F90) $(F90FLAGS) -I${INC_DIR} -c $<
