@@ -16,12 +16,15 @@ environment variables:
 * F90      - the command with which to invoke the Fortran compiler
 * F90FLAGS - flags to pass to the compiler, e.g. -g
 * OMPFLAGS - the flag(s) required to enable OpenMP with the chosen compiler
+* MPI_F90  - the wrapper with which to invoke the Fortran compiler
+             when building (and linking) with MPI
 
 e.g. to build with Gnu Fortran I use:
 
     export F90=gfortran
     export F90FLAGS=-g
     export OMPFLAGS=-fopenmp
+    export MPIF90=mpif90
 
 ## Examples ##
 
