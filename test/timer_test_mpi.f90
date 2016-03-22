@@ -13,7 +13,7 @@ PROGRAM timer_test
 
   real(r_def) :: mysum
 
-  integer numtasks, rank, ierr, rc, len, i
+  integer numtasks, rank, ierr, rc, len, i, j
   character*(MPI_MAX_PROCESSOR_NAME) name
 
   !--------------------------------------------------------------
@@ -26,16 +26,17 @@ PROGRAM timer_test
      call MPI_ABORT(MPI_COMM_WORLD, rc, ierr)
   end if
 
-  ! Get the number of processors this job is using:
+  ! Get the number of processors this job is using
   call MPI_COMM_SIZE(MPI_COMM_WORLD, numtasks, ierr)
 
-  ! Get the rank of the processor this thread is running on.  (Each
-  ! processor has a unique rank.)
+  ! Get the rank of the processor this thread is running on
   call MPI_COMM_RANK(MPI_COMM_WORLD, rank, ierr)
 
   call timer_init()
   mysum = 0.0d0
-  nloops = 200
+
+  ! Give us a load imbalance
+  nloops = 200*(rank+1)
 
   !--------------------------------------------------------------
   ! Time-stepping
