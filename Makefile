@@ -5,16 +5,30 @@ SRC_DIR = src
 # Location of the test code
 TEST_DIR = test
 
-${DLT_LIB}: ${SRC_DIR}/*.?90
-	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB}
+# Build the non-mpi version of the library by default
+all: sm_lib
+
+.PHONY: sm_lib
+sm_lib: ${SRC_DIR}/*.?90
+	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} sm_build
+	mv ${SRC_DIR}/${DLT_LIB} .
+
+.PHONY: dm_lib
+dm_lib: ${SRC_DIR}/*.?90
+	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} dm_build
 	mv ${SRC_DIR}/${DLT_LIB} .
 
 # The directory 'test' does actually exist but this target does not
 # create or update it - therefore mark it as phony.
-.PHONY: test
-test:
+.PHONY: sm_test
+sm_test:
 	${MAKE} ${DLT_LIB}
-	${MAKE} --directory=test test
+	${MAKE} --directory=test sm_test
+
+.PHONY: dm_test
+dm_test:
+	${MAKE} ${DLT_LIB}
+	${MAKE} --directory=test dm_test
 
 .PHONY: clean
 clean:
