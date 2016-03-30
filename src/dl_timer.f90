@@ -86,12 +86,33 @@ MODULE dl_timer
    !> The number of timed regions created for each thread
    INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
    
-   !-------------------------------------------------------------------
-   ! Publicly-accessible routines
+  !-------------------------------------------------------------------
+  ! Publicly-accessible routines
 
-   PUBLIC timer_init, time_in_s, timer_start, timer_stop, timer_report
+  PUBLIC timer_init, time_in_s, timer_start, timer_stop, timer_report
 
- CONTAINS
+CONTAINS
+
+   !======================================================================
+
+   !> Returns the current system time using the selected timer
+   function time_now()
+     implicit none
+     real(wp) :: time_now
+     integer :: iclk
+
+     select case(base_timer)
+     case(OMP_TIMER)
+! Requires that this file be compiled with OpenMP enabled
+!$      time_now = omp_get_wtime()         
+     case(RDTSC_TIMER)
+        time_now = REAL(getticks(), wp)
+     case(INTRINSIC_TIMER)
+        CALL SYSTEM_CLOCK(iclk)
+        time_now = REAL(iclk, wp)
+     end select
+
+   end function time_now
 
    !======================================================================
 
@@ -131,6 +152,9 @@ MODULE dl_timer
               &   ', max count = ',I11)") iclk_rate, iclk_max
          clock_tick_s = 1.0d0/REAL(iclk_rate)
       end select
+
+      write (*,"('TIMING: effective clock granularity = ', 1E13.5,'(s)')") &
+           timer_granularity()
 
       nThreads = 1
 !$    nThreads = omp_get_max_threads()
@@ -175,7 +199,30 @@ MODULE dl_timer
 
    END SUBROUTINE timer_init
 
-!============================================================================
+   !=========================================================================
+
+   function timer_granularity()
+     implicit none
+     real(wp) :: timer_granularity
+     !> Measure the effective granularity of the timer by calling
+     !! it repeatedly and looking at the minimum amount of time
+     !! between the times it returns
+     integer, parameter :: ntimes = 10000
+     real(wp) :: times(ntimes)
+     real(wp) :: diff, min_diff
+     integer  :: i
+     do i=1,ntimes
+       times(i) = time_now()
+     end do
+     min_diff = 1.0E10
+     do i=1,ntimes-1
+        diff = times(i+1) - times(i)
+        if(diff < min_diff) min_diff = diff
+     end do
+     timer_granularity = min_diff
+   end function timer_granularity
+
+   !=========================================================================
 
    REAL(wp) FUNCTION time_in_s(clk0,clk1)
       IMPLICIT none
@@ -255,16 +302,7 @@ MODULE dl_timer
       idx = ji
 
       ! And finally record the current timer value
-      select case(base_timer)
-      case(OMP_TIMER)
-! Requires that this file be compiled with OpenMP enabled
-!$       timer(ji,ith)%istart = omp_get_wtime()         
-      case(RDTSC_TIMER)
-         timer(ji,ith)%istart = REAL(getticks(), wp)
-      case(INTRINSIC_TIMER)
-         CALL SYSTEM_CLOCK(iclk)
-         timer(ji,ith)%istart = REAL(iclk, wp)
-      end select
+      timer(ji,ith)%istart = time_now()
 
    END SUBROUTINE timer_start
 
@@ -273,21 +311,14 @@ MODULE dl_timer
    SUBROUTINE timer_stop(itag)
       IMPLICIT none
       INTEGER, INTENT(in) :: itag ! Flag identifying the timer
-      ! Stop the specified timer and record the elapsed number of ticks
-      ! since it was started.
+      !> Stop the specified timer and record the elapsed number of ticks
+      !! since it was started.
       INTEGER :: iclk, ith
       INTEGER (kind=int64) :: iclk64
-      REAL(wp) :: time_now, delta_t
+      REAL(wp) :: thistime, delta_t
 
-      select case(base_timer)
-      case(OMP_TIMER)
-!$       time_now = omp_get_wtime()
-      case(RDTSC_TIMER)
-         iclk64 = getticks()
-      case(INTRINSIC_TIMER)
-         CALL SYSTEM_CLOCK(iclk)
-         iclk64 = INT(iclk, int64)
-      end select
+      ! Stop the clock
+      thistime = time_now()
 
       IF(itag < 1)RETURN
 
@@ -296,7 +327,7 @@ MODULE dl_timer
 
       select case(base_timer)
       case(OMP_TIMER)
-         delta_t = time_now - timer(itag,ith)%istart
+         delta_t = thistime - timer(itag,ith)%istart
          timer(itag,ith)%total = timer(itag,ith)%total + delta_t             
          ! If we're recording a time-series then store this result. Currently
          ! only implemented for the OpenMP timer as awaiting 'time_now()'
@@ -307,14 +338,14 @@ MODULE dl_timer
          end if
       case(RDTSC_TIMER)
          timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (REAL(iclk64,wp) - timer(itag,ith)%istart)
+                          (thistime - timer(itag,ith)%istart)
       case(INTRINSIC_TIMER)
-         IF( iclk < timer(itag,ith)%istart )THEN
-            iclk64 = iclk64 + INT(iclk_max,int64)
+         IF( thistime < timer(itag,ith)%istart )THEN
+            thistime = thistime + REAL(iclk_max,wp)
          END IF
 
          timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (REAL(iclk64,wp) - timer(itag,ith)%istart)
+                          (thistime - timer(itag,ith)%istart)
       end select
 
    END SUBROUTINE timer_stop
