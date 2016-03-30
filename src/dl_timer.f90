@@ -208,16 +208,22 @@ CONTAINS
      !! it repeatedly and looking at the minimum amount of time
      !! between the times it returns
      integer, parameter :: ntimes = 10000
+     real(wp), parameter :: tol_zero = 1.0E-10
      real(wp) :: times(ntimes)
      real(wp) :: diff, min_diff
-     integer  :: i
+     integer  :: i, j
      do i=1,ntimes
        times(i) = time_now()
      end do
      min_diff = 1.0E10
      do i=1,ntimes-1
-        diff = times(i+1) - times(i)
-        if(diff < min_diff) min_diff = diff
+        j = i+1
+        do while(j<ntimes)
+           diff = times(j) - times(i)
+           if(diff > tol_zero)exit
+           j = j + 1
+        end do
+        if(diff > tol_zero .and. diff < min_diff) min_diff = diff
      end do
      timer_granularity = min_diff
    end function timer_granularity
