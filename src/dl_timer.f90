@@ -6,80 +6,101 @@ MODULE dl_timer
 
   PRIVATE
 
-   !-------------------------------------------------------------------
-   ! Define some constants to identify the different timers that
-   ! we support
+  !-------------------------------------------------------------------
+  ! Define some constants to identify the different timers that
+  ! we support
 
-   ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
-   INTEGER, PARAMETER :: RDTSC_TIMER = 0
-   ! Use the OpenMP wtime routine (must link against OpenMP)
-   INTEGER, PARAMETER :: OMP_TIMER=1
-   ! Use the Fortran intrinsic timer (precision may be limited)
-   INTEGER, PARAMETER :: INTRINSIC_TIMER=2
+  ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
+  INTEGER, PARAMETER :: RDTSC_TIMER = 0
+  ! Use the OpenMP wtime routine (must link against OpenMP)
+  INTEGER, PARAMETER :: OMP_TIMER=1
+  ! Use the Fortran intrinsic timer (precision may be limited)
+  INTEGER, PARAMETER :: INTRINSIC_TIMER=2
 
-   !-------------------------------------------------------------------
-   ! Section that configures which timer is used
+  !-------------------------------------------------------------------
+  ! Section that configures which timer is used
 
-   !> Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
-   !! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
-   !! is used.
-   LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
-   !> Which timer type to use by default
-   INTEGER :: base_timer = OMP_TIMER
+  !> Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
+  !! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
+  !! is used.
+  LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
+  !> Which timer type to use by default
+  INTEGER :: base_timer = OMP_TIMER
 
-   !------------------------------------------------------------------
-   ! Type definitions
-   !: double precision (real 8)
-   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
+  !------------------------------------------------------------------
+  ! Type definitions
+  !: double precision (real 8)
+  INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
-   REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
+  REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
 
-   REAL(wp), PARAMETER :: REAL_SIZE = 8.0_wp              ! in bytes
-   REAL(wp), PARAMETER :: INT_SIZE  = 4.0_wp              ! in bytes
-   REAL(wp), PARAMETER :: MB_SIZE   = 1024.0_wp*1024.0_wp ! no. of bytes in 1 MB
+  REAL(wp), PARAMETER :: REAL_SIZE = 8.0_wp              ! in bytes
+  REAL(wp), PARAMETER :: INT_SIZE  = 4.0_wp              ! in bytes
+  REAL(wp), PARAMETER :: MB_SIZE   = 1024.0_wp*1024.0_wp ! no. of bytes in 1 MB
 
-   INTEGER, PARAMETER :: numout = 6   ! Unit for stdout
+  INTEGER, PARAMETER :: numout = 6   ! Unit for stdout
 
-   !-------------------------------------------------------------------
-   ! Parameters and types for the timing routines
+  !-------------------------------------------------------------------
+  ! Parameters and types for the timing routines
 
-   INTEGER :: iclk_rate ! Ticks per second of Fortran timer
-   INTEGER :: iclk_max  ! Max value that Fortran timer can return
-   REAL(wp) :: clock_tick_s ! Time in seconds between clock ticks
+  INTEGER :: iclk_rate ! Ticks per second of Fortran timer
+  INTEGER :: iclk_max  ! Max value that Fortran timer can return
+  REAL(wp) :: clock_tick_s ! Time in seconds between clock ticks
 
-   INTEGER, PARAMETER :: LABEL_LEN  = 128
-   INTEGER, PARAMETER :: MAX_TIMERS = 60
+  INTEGER, PARAMETER :: LABEL_LEN  = 128
+  INTEGER, PARAMETER :: MAX_TIMERS = 60
 
-   TYPE :: timer_type
-      !> The name of this timed region
-      CHARACTER (LABEL_LEN) :: label
-      !> Time at which region was most recently entered
-      REAL       (KIND=wp)  :: istart
-      !> Total time spent in this timed region (accumulated over
-      !! all visits).
-      REAL       (KIND=wp)  :: total
-      !> The no. of times this timed region has been executed.
-      INTEGER               :: count
-      !> The no. of repeated intervals within this timed region.
-      !! Used in timer_report() to produce a mean time per repeat.
-      !! Default value is 1. User can specify value in call to
-      !! timer_start().
-      INTEGER               :: nrepeat
-   END TYPE timer_type
+  TYPE :: timer_type
+     !> The name of this timed region
+     CHARACTER (LABEL_LEN) :: label
+     !> Time at which region was most recently entered
+     REAL       (KIND=wp)  :: istart
+     !> Total time spent in this timed region (accumulated over
+     !! all visits).
+     REAL       (KIND=wp)  :: total
+     !> The no. of times this timed region has been executed.
+     INTEGER               :: count
+     !> The no. of repeated intervals within this timed region.
+     !! Used in timer_report() to produce a mean time per repeat.
+     !! Default value is 1. User can specify value in call to
+     !! timer_start().
+     INTEGER               :: nrepeat
+  END TYPE timer_type
 
-   INTEGER, SAVE :: nThreads ! No. of OMP threads being used (1 if no OMP)
-                             ! Set in init_time().
+  INTEGER, SAVE :: nThreads ! No. of OMP threads being used (1 if no OMP)
+                            ! Set in init_time().
 
-   TYPE(timer_type), ALLOCATABLE, SAVE, DIMENSION(:,:) :: timer
+  TYPE(timer_type), ALLOCATABLE, SAVE, DIMENSION(:,:) :: timer
 
-   INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
+  INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
    
-   !-------------------------------------------------------------------
-   ! Publicly-accessible routines
+  !-------------------------------------------------------------------
+  ! Publicly-accessible routines
 
-   PUBLIC timer_init, time_in_s, timer_start, timer_stop, timer_report
+  PUBLIC timer_init, time_in_s, timer_start, timer_stop, timer_report
 
- CONTAINS
+CONTAINS
+
+   !======================================================================
+
+   !> Returns the current system time using the selected timer
+   function time_now()
+     implicit none
+     real(wp) :: time_now
+     integer :: iclk
+
+     select case(base_timer)
+     case(OMP_TIMER)
+! Requires that this file be compiled with OpenMP enabled
+!$      time_now = omp_get_wtime()         
+     case(RDTSC_TIMER)
+        time_now = REAL(getticks(), wp)
+     case(INTRINSIC_TIMER)
+        CALL SYSTEM_CLOCK(iclk)
+        time_now = REAL(iclk, wp)
+     end select
+
+   end function time_now
 
    !======================================================================
 
@@ -120,6 +141,9 @@ MODULE dl_timer
          clock_tick_s = 1.0d0/REAL(iclk_rate)
       end select
 
+      write (*,"('TIMING: effective clock granularity = ', 1E13.5,'(s)')") &
+           timer_granularity()
+
       nThreads = 1
 !$    nThreads = omp_get_max_threads()
 
@@ -149,7 +173,30 @@ MODULE dl_timer
 
    END SUBROUTINE timer_init
 
-!============================================================================
+   !=========================================================================
+
+   function timer_granularity()
+     implicit none
+     real(wp) :: timer_granularity
+     !> Measure the effective granularity of the timer by calling
+     !! it repeatedly and looking at the minimum amount of time
+     !! between the times it returns
+     integer, parameter :: ntimes = 10000
+     real(wp) :: times(ntimes)
+     real(wp) :: diff, min_diff
+     integer  :: i
+     do i=1,ntimes
+       times(i) = time_now()
+     end do
+     min_diff = 1.0E10
+     do i=1,ntimes-1
+        diff = times(i+1) - times(i)
+        if(diff < min_diff) min_diff = diff
+     end do
+     timer_granularity = min_diff
+   end function timer_granularity
+
+   !=========================================================================
 
    REAL(wp) FUNCTION time_in_s(clk0,clk1)
       IMPLICIT none
@@ -229,16 +276,7 @@ MODULE dl_timer
       idx = ji
 
       ! And finally record the current timer value
-      select case(base_timer)
-      case(OMP_TIMER)
-! Requires that this file be compiled with OpenMP enabled
-!$       timer(ji,ith)%istart = omp_get_wtime()         
-      case(RDTSC_TIMER)
-         timer(ji,ith)%istart = REAL(getticks(), wp)
-      case(INTRINSIC_TIMER)
-         CALL SYSTEM_CLOCK(iclk)
-         timer(ji,ith)%istart = REAL(iclk, wp)
-      end select
+      timer(ji,ith)%istart = time_now()
 
    END SUBROUTINE timer_start
 
@@ -247,21 +285,14 @@ MODULE dl_timer
    SUBROUTINE timer_stop(itag)
       IMPLICIT none
       INTEGER, INTENT(in) :: itag ! Flag identifying the timer
-      ! Stop the specified timer and record the elapsed number of ticks
-      ! since it was started.
+      !> Stop the specified timer and record the elapsed number of ticks
+      !! since it was started.
       INTEGER :: iclk, ith
       INTEGER (kind=int64) :: iclk64
-      REAL(wp) :: time_now
+      REAL(wp) :: thistime
 
-      select case(base_timer)
-      case(OMP_TIMER)
-!$       time_now = omp_get_wtime()
-      case(RDTSC_TIMER)
-         iclk64 = getticks()
-      case(INTRINSIC_TIMER)
-         CALL SYSTEM_CLOCK(iclk)
-         iclk64 = INT(iclk, int64)
-      end select
+      ! Stop the clock
+      thistime = time_now()
 
       IF(itag < 1)RETURN
 
@@ -271,17 +302,17 @@ MODULE dl_timer
       select case(base_timer)
       case(OMP_TIMER)
          timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (time_now - timer(itag,ith)%istart)
+                          (thistime - timer(itag,ith)%istart)
       case(RDTSC_TIMER)
          timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (REAL(iclk64,wp) - timer(itag,ith)%istart)
+                          (thistime - timer(itag,ith)%istart)
       case(INTRINSIC_TIMER)
-         IF( iclk < timer(itag,ith)%istart )THEN
-            iclk64 = iclk64 + INT(iclk_max,int64)
+         IF( thistime < timer(itag,ith)%istart )THEN
+            thistime = thistime + REAL(iclk_max,wp)
          END IF
 
          timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (REAL(iclk64,wp) - timer(itag,ith)%istart)
+                          (thistime - timer(itag,ith)%istart)
       end select
 
    END SUBROUTINE timer_stop
