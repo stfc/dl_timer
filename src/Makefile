@@ -16,7 +16,7 @@ dm_build:
 	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" LIB_NAME=${LIB_NAME} lib
 
 lib: ${MODULES} dl_timer.o
-	${AR} ${ARFLAGS} ${LIB_NAME} ${MODULES}
+	${AR} ${ARFLAGS} ${LIB_NAME} ${MODULES} dl_timer.o
 
 .PHONY: clean
 clean:
