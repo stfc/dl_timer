@@ -1,6 +1,5 @@
 # Modules that are independent of whether we're using MPI
-COMMON_MODULES = dl_timer.o \
-                 intel_timer_mod.o
+COMMON_MODULES = intel_timer_mod.o
 
 SM_MODULES = parallel_stub.o
 DM_MODULES = parallel_mpi.o
@@ -16,7 +15,7 @@ sm_build:
 dm_build:
 	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" LIB_NAME=${LIB_NAME} lib
 
-lib: ${MODULES}
+lib: ${MODULES} dl_timer.o
 	${AR} ${ARFLAGS} ${LIB_NAME} ${MODULES}
 
 .PHONY: clean
@@ -29,7 +28,7 @@ allclean: clean
 
 # We have to build the timing module with OpenMP enabled in
 # order to use the OpenMP timing routine
-dl_timer.o: ${MODULES}
+dl_timer.o: ${MODULES} dl_timer.f90
 	$(F90) $(F90FLAGS) $(OMPFLAGS) -c dl_timer.f90
 
 # Have to compile the MPI part of the library using a Fortran
