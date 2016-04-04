@@ -26,19 +26,22 @@ MODULE dl_timer
    LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
    !> Which timer type to use by default
    INTEGER :: base_timer = OMP_TIMER
+   !> Whether to record time-series data - currently only supported
+   !! for the OMP timer
+   LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
    !------------------------------------------------------------------
    ! Type definitions
    !: double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
+   ! Single precision
+   INTEGER, PARAMETER :: sp = KIND(1.0)
 
+   !> Tolerance below which we consider a number to be zero
    REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
 
-   REAL(wp), PARAMETER :: REAL_SIZE = 8.0_wp              ! in bytes
-   REAL(wp), PARAMETER :: INT_SIZE  = 4.0_wp              ! in bytes
-   REAL(wp), PARAMETER :: MB_SIZE   = 1024.0_wp*1024.0_wp ! no. of bytes in 1 MB
-
-   INTEGER, PARAMETER :: numout = 6   ! Unit for stdout
+   !> Unit for stdout
+   INTEGER, PARAMETER :: numout = 6
 
    !-------------------------------------------------------------------
    ! Parameters and types for the timing routines
@@ -47,8 +50,13 @@ MODULE dl_timer
    INTEGER :: iclk_max  ! Max value that Fortran timer can return
    REAL(wp) :: clock_tick_s ! Time in seconds between clock ticks
 
+   !> Maximum length of the label for a timed region
    INTEGER, PARAMETER :: LABEL_LEN  = 128
-   INTEGER, PARAMETER :: MAX_TIMERS = 60
+   !> Maximum number of distinct timed regions that an application
+   !! may have 
+   INTEGER, PARAMETER :: MAX_TIMERS = 30
+   !> How many samples to keep when recording a time-line
+   INTEGER, PARAMETER :: TIME_SERIES_LEN = 10000
 
    TYPE :: timer_type
       !> The name of this timed region
@@ -65,6 +73,9 @@ MODULE dl_timer
       !! Default value is 1. User can specify value in call to
       !! timer_start().
       INTEGER               :: nrepeat
+      !> Array to hold the individual time periods that we collect
+      !! if producing a time-line
+      REAL(KIND=sp), ALLOCATABLE :: time_series(:)
    END TYPE timer_type
 
    INTEGER, SAVE :: nThreads ! No. of OMP threads being used (1 if no OMP)
@@ -72,6 +83,7 @@ MODULE dl_timer
 
    TYPE(timer_type), ALLOCATABLE, SAVE, DIMENSION(:,:) :: timer
 
+   !> The number of timed regions created for each thread
    INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
    
    !-------------------------------------------------------------------
@@ -132,6 +144,20 @@ MODULE dl_timer
       IF(ierr /= 0)THEN
          WRITE (*,*) 'init_time: ERROR: failed to allocate timer structures'
          RETURN
+      END IF
+
+      ! Allocate memory required for recording time-series data
+      IF(RECORD_TIME_SERIES)THEN
+         DO ith = 1, nThreads, 1
+            DO ji=1,MAX_TIMERS,1
+               allocate(timer(ji,ith)%time_series(TIME_SERIES_LEN), &
+                        Stat=ierr)
+               if(ierr /= 0)then
+                  write (*,*) 'init_time: ERROR: failed to allocate time-series array'
+                  return
+               end if
+            END DO
+         END DO
       END IF
 
 !$OMP PARALLEL DO default(none), shared(nThreads,itimerCount,timer), &
@@ -251,7 +277,7 @@ MODULE dl_timer
       ! since it was started.
       INTEGER :: iclk, ith
       INTEGER (kind=int64) :: iclk64
-      REAL(wp) :: time_now
+      REAL(wp) :: time_now, delta_t
 
       select case(base_timer)
       case(OMP_TIMER)
@@ -270,8 +296,15 @@ MODULE dl_timer
 
       select case(base_timer)
       case(OMP_TIMER)
-         timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (time_now - timer(itag,ith)%istart)
+         delta_t = time_now - timer(itag,ith)%istart
+         timer(itag,ith)%total = timer(itag,ith)%total + delta_t             
+         ! If we're recording a time-series then store this result. Currently
+         ! only implemented for the OpenMP timer as awaiting 'time_now()'
+         ! routine being developed in MPI branch.
+         if(record_time_series .AND. &
+            timer(itag,ith)%count < TIME_SERIES_LEN)then
+            timer(itag,ith)%time_series(timer(itag,ith)%count) = REAL(delta_t, kind=sp)
+         end if
       case(RDTSC_TIMER)
          timer(itag,ith)%total = timer(itag,ith)%total + &
                           (REAL(iclk64,wp) - timer(itag,ith)%istart)
@@ -323,6 +356,8 @@ MODULE dl_timer
       else
          call timer_report_no_repeats(timer_str)
       end if
+
+      if(RECORD_TIME_SERIES) call output_time_series()
 
     end SUBROUTINE timer_report
 
@@ -413,6 +448,47 @@ MODULE dl_timer
       WRITE(*,"(83('='))")
 
    END SUBROUTINE timer_report_with_repeats
+
+   !===================================================================
+
+   SUBROUTINE output_time_series()
+     implicit none
+     !> For each thread and each timed region output the time-series
+     !! data that we've collected
+     integer :: ith, ji, thr_num, ierr
+     !> Unit no. used to create each file
+     integer, parameter :: funit=72
+     !> The name of the file to create
+     character(len=128) :: fname
+     !> String representation of current thread idx + 10000
+     character(len=5)   :: thr_idx_str
+
+     DO ith = 1, nThreads, 1
+        ! Loop over the timed regions for this thread
+        DO ji = 1, itimerCount(ith)
+           ! Construct a string containing the thread index prefixed by
+           ! as many zeroes as required
+           thr_num = 10000 + ith
+           write(thr_idx_str, "(I5)") thr_num
+           ! Construct the filename for this time series
+           fname='times_'//TRIM(timer(ji,ith)%label)//'_t'//              &
+                 & thr_idx_str(3:5)//'.dat'
+           open(unit=funit, file=fname, status='unknown', action='write', &
+                iostat=ierr)
+           if(ierr /= 0)then
+              write (*,"('output_time_series: error creating file ',(A),  &
+                       & ' - skipping')") fname
+              continue
+           end if
+           write(funit, "('# Time series for region [',(A),']')")         &
+                TRIM(timer(ji,ith)%label)
+           write(funit, "((E14.6))")                                      &
+                timer(ji,ith)%time_series(1:timer(ji,ith)%count)
+           close(funit)
+        END DO ! timed regions
+     END DO ! threads
+
+   END SUBROUTINE output_time_series
 
    !===================================================================
 

@@ -10,16 +10,20 @@ timer_test_no_repeat.exe: ../dl_timer_lib.a timer_test_no_repeat.o
 timer_test_omp.exe: ../dl_timer_lib.a timer_test_omp.o
 	${F90} ${OMPFLAGS} timer_test_omp.o ../dl_timer_lib.a -o $@
 
+.PHONY: test
 test: timer_test.exe timer_test_no_repeat.exe timer_test_omp.exe
 	./timer_test.exe
 	./timer_test_no_repeat.exe
 	./timer_test_omp.exe
+
+.PHONY: clean allclean
 
 clean:
 	rm -f *.o *~
 
 allclean: clean
 	rm -f *.exe
+	rm -f times_*_t0*.dat
 
 # This test case must be compiled with OpenMP enabled
 timer_test_omp.o: timer_test_omp.f90
