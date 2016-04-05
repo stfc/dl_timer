@@ -6,6 +6,10 @@ module dl_timer_parallel
   !! instead.
   implicit none
 
+  ! This kind parameter definition is repeated from dl_timer.f90. We
+  ! could fix this by having a global types module.
+  integer, parameter :: wp = SELECTED_REAL_KIND(12,307)
+
 contains
 
   function is_parallel()
@@ -19,5 +23,18 @@ contains
     get_rank = 0
     return
   end function get_rank
+
+  subroutine calc_dm_timer_stats(nThreads, ntimers, &
+                                 times, max_times, min_times, sum_times)
+    integer,                                  intent(in) :: nThreads, ntimers
+    real(wp),                                 intent(in) :: times(ntimers, &
+                                                                  nThreads)
+    real(wp), dimension(2,ntimers,nThreads), intent(out) :: max_times, min_times
+    real(wp), dimension(ntimers,nThreads),   intent(out) :: sum_times
+    max_times(:,:,:) = 0.0
+    min_times(:,:,:) = 0.0
+    sum_times(:,:) = 0.0
+    return
+  end subroutine calc_dm_timer_stats
 
 end module dl_timer_parallel

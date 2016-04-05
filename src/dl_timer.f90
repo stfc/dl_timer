@@ -359,25 +359,27 @@ CONTAINS
    !==========================================================================
 
    SUBROUTINE timer_report()
-     use dl_timer_parallel, only: is_parallel, get_rank
+     use dl_timer_parallel, only: is_parallel, get_rank, calc_dm_timer_stats
      implicit none
      integer       :: jt, itimer, rank
      integer       :: ierr
      logical       :: have_repeats
      ! Arrays used to gather stats for each timed region when running
      ! MPI parallel
-     real(wp), allocatable, dimension(:,:,:) :: times, max_times, &
-                                                min_times, sum_times
+     real(wp), allocatable, dimension(:,:,:) :: max_times, min_times
+     real(wp), allocatable, dimension(:,:) :: raw_times, sum_times
+
      character(len=120) :: timer_str = ""
 
      if( is_parallel() )then
+
         ! If this is a parallel run then, for each timed region, we want
         ! the minimum, maximum and sum (over all processes) of the time
         ! spent inside it.
-        allocate(times(2,MAX_TIMERS,nThreads), &
-                 max_times(2,MAX_TIMERS,nThreads), &
-                 min_times(2,MAX_TIMERS,nThreads), &
-                 sum_times(2,MAX_TIMERS,nThreads), Stat=ierr)
+        allocate(raw_times(MAX_TIMERS, nThreads), &
+                 max_times(2, MAX_TIMERS, nThreads), &
+                 min_times(2, MAX_TIMERS, nThreads), &
+                 sum_times(MAX_TIMERS, nThreads), Stat=ierr)
         if(ierr /= 0)then
            write(*,"('Timer report: failed to allocate memory to gather ', &
                    & 'MPI stats: no timing report generated')")
@@ -388,12 +390,13 @@ CONTAINS
         ! reduction operations
         do jt = 1, nThreads, 1
            do itimer = 1, itimerCount(jt)
-              times(1,itimer,jt) = timer(itimer,jt)%total
-              times(2,itimer,jt) = get_rank()
+              raw_times(itimer,jt) = timer(itimer,jt)%total
            end do
         end do
 
-        ! Call the reduction operations here ARPDBG
+        call calc_dm_timer_stats(nThreads, MAX_TIMERS, raw_times, &
+                                 max_times, min_times, sum_times)
+
      end if
 
      select case(base_timer)
