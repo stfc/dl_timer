@@ -43,6 +43,10 @@ allclean: clean
 timer_test_mpi.o: timer_test_mpi.f90
 	$(MPIF90) $(F90FLAGS) -I$(INC_DIR) -c $<
 
+# This test case must be compiled with MPI include path
+timer_test_mpi.o: timer_test_mpi.f90
+	$(MPIF90) $(F90FLAGS) -I$(INC_DIR) -c $<
+
 # This test case must be compiled with OpenMP enabled
 timer_test_omp.o: timer_test_omp.f90
 	$(F90) $(F90FLAGS) $(OMPFLAGS) -I$(INC_DIR) -c $<
