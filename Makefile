@@ -19,7 +19,11 @@ dm_lib: ${SRC_DIR}/*.?90
 	mv ${SRC_DIR}/${DLT_LIB} .
 
 # The directory 'test' does actually exist but this target does not
-# create or update it - therefore mark it as phony.
+# create or update it - therefore mark it as phony. By default we do the
+# non-MPI tests.
+.PHONY: test
+test: sm_test
+
 .PHONY: sm_test
 sm_test:
 	${MAKE} ${DLT_LIB}
