@@ -27,7 +27,8 @@ MODULE dl_timer
    !> Which timer type to use by default
    INTEGER :: base_timer = OMP_TIMER
    !> Whether to record time-series data - currently only supported
-   !! for the OMP timer
+   !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
+   !! writes out time-line data.
    LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
    !------------------------------------------------------------------
@@ -619,8 +620,9 @@ CONTAINS
    !===================================================================
 
    SUBROUTINE output_time_series()
+     use dl_timer_parallel, only: get_rank
      implicit none
-     !> For each thread and each timed region output the time-series
+     !> For each thread and each timed region on process 0, output the time-series
      !! data that we've collected
      integer :: ith, ji, thr_num, ierr
      !> Unit no. used to create each file
@@ -629,6 +631,9 @@ CONTAINS
      character(len=128) :: fname
      !> String representation of current thread idx + 10000
      character(len=5)   :: thr_idx_str
+
+     ! Only process 0 writes out time-line data
+     if(get_rank() /= 0)return
 
      DO ith = 1, nThreads, 1
         ! Loop over the timed regions for this thread
