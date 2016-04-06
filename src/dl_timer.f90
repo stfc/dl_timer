@@ -396,7 +396,6 @@ CONTAINS
 
         call calc_dm_timer_stats(nThreads, MAX_TIMERS, raw_times, &
                                  max_times, min_times, sum_times)
-
      end if
 
      select case(base_timer)
@@ -423,13 +422,25 @@ CONTAINS
         end if
      end do
 
+     ! Call the appropriate routine to generate the report
      if(have_repeats)then
-        call timer_report_with_repeats(timer_str)
+        if(is_parallel())then
+           call timer_report_parallel_with_repeats(timer_str, max_times, &
+                                                   min_times, sum_times)
+        else
+           call timer_report_with_repeats(timer_str)
+        end if
      else
-        call timer_report_no_repeats(timer_str)
+        if(is_parallel())then
+           call timer_report_parallel_no_repeats(timer_str, max_times, &
+                                                 min_times, sum_times)
+        else
+           call timer_report_no_repeats(timer_str)
+        end if
      end if
 
-      if(RECORD_TIME_SERIES) call output_time_series()
+     ! Output time-series data if requested
+     if(RECORD_TIME_SERIES) call output_time_series()
 
     end subroutine timer_report
 
@@ -476,6 +487,60 @@ CONTAINS
          WRITE(*," (67('='))")
       end if
    END SUBROUTINE timer_report_no_repeats
+
+   !==========================================================================
+
+    subroutine timer_report_parallel_no_repeats(timer_str, max_times, &
+                                                min_times, sum_times)
+      use dl_timer_parallel, only: get_rank, num_ranks
+      implicit none
+      !> Write timing report for stdout for the case where we are MPI parallel
+      !! and timed regions do not have implicit repeats
+      CHARACTER(len=*), INTENT(in) :: timer_str
+      real(kind=wp), intent(in) :: max_times(:,:,:), min_times(:,:,:), &
+                                   sum_times(:,:)
+      ! Locals
+      INTEGER          :: ji, jt
+      integer          :: rank, nproc
+      character(len=8) :: minrank, maxrank
+
+      rank = get_rank()
+      nproc = num_ranks()
+
+      if(rank == 0)then
+
+         WRITE(*,"(/31('='),' Timing report ',31('='))")
+         WRITE(*,"(4x, (A))") TRIM(timer_str)
+         WRITE(*,"(77('-'))")
+         WRITE(*,"('Region',16x,'Count',6x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
+         WRITE(*,"(77('-'))")
+         DO jt = 1, nThreads, 1
+
+            IF(itimerCount(jt) > 0)THEN
+               if(jt > 1) WRITE(*, "(39('- '))")
+               WRITE(*," ('Thread ',I3)") jt-1
+            end if
+
+            DO ji=1,itimerCount(jt),1
+
+               ! Convert the ranks to strings as that allows us to produce nicer
+               ! formatting
+               write(minrank,"(I8)") INT(min_times(2,ji,jt))
+               write(maxrank,"(I8)") INT(max_times(2,ji,jt))
+
+               ! Truncate the label to 20 chars for table-formatting purposes
+               WRITE(*,"((A),1x,I6,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
+                            timer(ji,jt)%label(1:20), timer(ji,jt)%count,   &
+                            min_times(1,ji,jt)/REAL(timer(ji,jt)%count),    &
+                            TRIM(ADJUSTL(minrank)), &
+                            sum_times(ji,jt)/REAL(nproc*timer(ji,jt)%count),&
+                            max_times(1,ji,jt)/REAL(timer(ji,jt)%count),    &
+                            TRIM(ADJUSTL(maxrank))
+            END DO
+         END DO
+         WRITE(*," (77('='))")
+      end if
+   END SUBROUTINE timer_report_parallel_no_repeats
 
    !==========================================================================
 
@@ -530,6 +595,64 @@ CONTAINS
         write(*,"(83('='))")
      end if
    END SUBROUTINE timer_report_with_repeats
+
+   !==========================================================================
+
+   subroutine timer_report_parallel_with_repeats(timer_str, max_times, &
+                                                 min_times, sum_times)
+     use dl_timer_parallel, only: get_rank
+     !> Write the timing report for the case where one or more regions have an
+     !! implicit repeat > 1.
+     IMPLICIT none
+     CHARACTER(len=*), INTENT(in) :: timer_str
+     real(kind=wp), intent(in) :: max_times(:,:,:), min_times(:,:,:), &
+                                  sum_times(:,:)
+      ! Locals
+     INTEGER       :: ji, jt
+     REAL(KIND=wp) :: wtime, tmean, trepeat
+     integer :: rank
+
+     rank = get_rank()
+     if(rank == 0)then
+
+        write(*,"(/34('='),' Timing report ',34('='))")
+        write(*,"(4x,(A))") TRIM(timer_str)
+        write(*,"(83('-'))")
+        write(*,"('Region',26x,'Counts',6x,'Total',9x,' Average    Average/repeat   Error')")
+        write(*,"(83('-'))")
+        do jt = 1, nThreads, 1
+
+           if(itimerCount(jt) > 0)then
+              if(jt > 1) WRITE(*, "(34('- '))")
+              WRITE(*," ('Thread ',I3)") jt-1
+           end if
+
+           do ji=1,itimerCount(jt),1
+
+              if(use_rdtsc_timer)then
+                 wtime = timer(ji,jt)%total
+              else
+                 wtime = time_in_s(0._wp,timer(ji,jt)%total)
+              end if
+
+              ! Mean time spent in timed region
+              tmean = wtime/REAL(timer(ji,jt)%count)
+              ! Mean time spent in the repeated section of code in the
+              ! timed region
+              trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
+              ! Truncate the label to 32 chars for table-formatting purposes
+              write(*,"((A),1x,I6,1x,E13.6,1x,E13.6,1x,E13.6,1x,E13.6)")  &
+                   timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
+                   wtime, tmean, trepeat,                                 & 
+                   ! Error estimate using quadrature formula for
+                   ! the time spent in just one of the nrepeat 
+                   ! regions - use product formula
+                   trepeat*time_err(timer(ji,jt)%count)/tmean
+           end do
+        end do
+        write(*,"(83('='))")
+     end if
+   END SUBROUTINE timer_report_parallel_with_repeats
 
    !===================================================================
 
