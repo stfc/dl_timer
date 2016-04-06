@@ -18,11 +18,25 @@ contains
     return
   end function is_parallel
 
+  !=========================================================================
+
   function get_rank()
+    !> No MPI support so we only have one process - rank 0
     integer :: get_rank
     get_rank = 0
     return
   end function get_rank
+
+  !=========================================================================
+
+  function num_ranks()
+    !> No MPI support so we only have a single process
+    integer :: num_ranks
+    num_ranks = 1
+    return
+  end function num_ranks
+
+  !=========================================================================
 
   subroutine calc_dm_timer_stats(nThreads, ntimers, &
                                  times, max_times, min_times, sum_times)
