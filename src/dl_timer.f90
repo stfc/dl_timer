@@ -472,7 +472,7 @@ CONTAINS
          WRITE(*,"(67('-'))")
          DO jt = 1, nThreads, 1
 
-            IF(itimerCount(jt) > 0)THEN
+            IF(itimerCount(jt) > 0 .AND. nThreads > 1)THEN
                if(jt > 1) WRITE(*, "(34('- '))")
                WRITE(*," ('Thread ',I3)") jt-1
             end if
@@ -518,7 +518,7 @@ CONTAINS
         write(*,"(83('-'))")
         do jt = 1, nThreads, 1
 
-           if(itimerCount(jt) > 0)then
+           if(itimerCount(jt) > 0 .AND. nThreads > 1)then
               if(jt > 1) WRITE(*, "(34('- '))")
               WRITE(*," ('Thread ',I3)") jt-1
            end if
@@ -581,7 +581,7 @@ CONTAINS
         write(*,"(83('-'))")
         do jt = 1, nThreads, 1
 
-           if(itimerCount(jt) > 0)then
+           if(itimerCount(jt) > 0 .AND. nThreads > 1)then
               if(jt > 1) WRITE(*, "(39('- '))")
               WRITE(*," ('Thread ',I3)") jt-1
            end if
