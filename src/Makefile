@@ -1,5 +1,5 @@
 # Modules that are independent of whether we're using MPI
-COMMON_MODULES = intel_timer_mod.o
+COMMON_MODULES = intel_timer_mod.o gettofd.o
 
 SM_MODULES = parallel_stub.o
 DM_MODULES = parallel_mpi.o
@@ -41,3 +41,6 @@ parallel_mpi.o: parallel_mpi.f90
 
 %.o: %.F90
 	$(F90) $(F90FLAGS) -c $<
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $<

@@ -1,6 +1,6 @@
 MODULE dl_timer
-
-  USE intel_timer_mod
+  use iso_c_binding
+  use intel_timer_mod
 !$ USE omp_lib
   IMPLICIT none
 
@@ -10,12 +10,14 @@ MODULE dl_timer
    ! Define some constants to identify the different timers that
    ! we support
 
-   ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
+   !> Intel-specific rdtsc timer (reads the Time Stamp Counter register)
    INTEGER, PARAMETER :: RDTSC_TIMER = 0
-   ! Use the OpenMP wtime routine (must link against OpenMP)
+   !> Use the OpenMP wtime routine (must link against OpenMP)
    INTEGER, PARAMETER :: OMP_TIMER=1
-   ! Use the Fortran intrinsic timer (precision may be limited)
+   !> Use the Fortran intrinsic timer (precision may be limited)
    INTEGER, PARAMETER :: INTRINSIC_TIMER=2
+   !> Use the C routine gettimeofday() (microsecond precision)
+   INTEGER, PARAMETER :: TOFDAY_TIMER=3
 
    !-------------------------------------------------------------------
    ! Section that configures which timer is used
@@ -25,7 +27,7 @@ MODULE dl_timer
    !! is used.
    LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
    !> Which timer type to use by default
-   INTEGER :: base_timer = OMP_TIMER
+   INTEGER :: base_timer = TOFDAY_TIMER!OMP_TIMER
    !> Whether to record time-series data - currently only supported
    !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
    !! writes out time-line data.
@@ -87,6 +89,20 @@ MODULE dl_timer
    !> The number of timed regions created for each thread
    INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
    
+   !-------------------------------------------------------------------
+   ! Interfaces to other routines
+
+   INTERFACE
+      !> Wrapper for the C code that calls gettimeofday which has
+      !! microsecond resolution.
+      function time_of_day() bind(c)
+        ! An interface body does not automatically import names from
+        ! surrounding scope
+        import :: C_DOUBLE
+        real(C_DOUBLE) :: time_of_day
+      end function time_of_day
+   END INTERFACE
+
   !-------------------------------------------------------------------
   ! Publicly-accessible routines
 
@@ -111,6 +127,8 @@ CONTAINS
      case(INTRINSIC_TIMER)
         CALL SYSTEM_CLOCK(iclk)
         time_now = REAL(iclk, wp)
+     case(TOFDAY_TIMER)
+        time_now = time_of_day()
      end select
 
    end function time_now
