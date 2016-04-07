@@ -10,10 +10,19 @@ module dl_timer_parallel
 contains
 
   function is_parallel()
-    !> Returns .TRUE. to indicate that dl_timer is built with MPI support
+    !> Returns .TRUE. to indicate that dl_timer is built with MPI support.
+    !! Aborts if MPI_Init() has not yet been called.
     logical :: is_parallel
-    is_parallel = .TRUE.
-    return
+    integer :: ierr
+
+    call MPI_INITIALIZED(is_parallel, ierr)
+
+    if(.not. is_parallel)then
+      write(*, &
+           "('TIMING: ERROR: timer_init() must be called after MPI_Init()!')")
+      stop
+    end if
+
   end function is_parallel
 
   !=========================================================================

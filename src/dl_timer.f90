@@ -118,24 +118,28 @@ CONTAINS
    !======================================================================
 
    SUBROUTINE timer_init()
-      use dl_timer_parallel, only: get_rank
+      use dl_timer_parallel, only: is_parallel, get_rank
       IMPLICIT none
       ! Set-up timing
       INTEGER :: ji, ith, ierr
       integer :: myrank
+      logical :: dm_parallel
 
+      ! Query whether or not we have been built DM parallel. If we have
+      ! but MPI_Init() has not yet been called then we abort.
+      dm_parallel = is_parallel()
       myrank = get_rank()
 
-! Check that init_time hasn't been called from within an OMP PARALLEL
-! region.
-!$      IF(omp_get_num_threads() > 1)THEN
+      ! Check that init_time hasn't been called from within an OMP PARALLEL
+      ! region.
+!$    IF(omp_get_num_threads() > 1)THEN
 !$OMP MASTER
-!$         WRITE(numout, &
-!$               "('init_time: ERROR: cannot be called from within OpenMP PARALLEL region.')")
+!$      WRITE(numout, &
+!$            "('init_time: ERROR: cannot be called from within OpenMP PARALLEL region.')")
 !$OMP END MASTER
 !$OMP BARRIER
-!$         STOP
-!$      END IF
+!$      STOP
+!$    END IF
 
       ! Initialise the timer structures
       select case(base_timer)

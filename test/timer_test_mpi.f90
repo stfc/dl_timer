@@ -32,10 +32,13 @@ PROGRAM timer_test
   ! Get the rank of the processor this thread is running on
   call MPI_COMM_RANK(MPI_COMM_WORLD, rank, ierr)
 
+  ! Initialise the timer library (must be done *after* MPI has been
+  ! initialised)
   call timer_init()
+
   mysum = 0.0d0
 
-  ! Give us a load imbalance
+  ! Artificially create a load imbalance
   nloops = 200*(rank+1)
 
   !--------------------------------------------------------------
