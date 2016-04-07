@@ -160,20 +160,20 @@ CONTAINS
 !$    END IF
 
       ! Initialise the timer structures
+      iclk_rate = 1
+      iclk_max = 1
+
       select case(base_timer)
 
       case(OMP_TIMER)
-         iclk_rate = 1
-         iclk_max = 1
 !$       clock_tick_s = omp_get_wtick()
          if(myrank == 0)then
             write (numout,"('TIMING: using OpenMP omp_get_wtime()')")
             write (numout,"('TIMING: time between clock ticks =',1E13.5,' (s)')") &
                  clock_tick_s
          end if
+
       case(RDTSC_TIMER)
-         iclk_rate = 1
-         iclk_max = 1
          clock_tick_s = 1.0d0 ! TODO work out how to get this quantity
          if(myrank == 0)write (*,"('TIMING: using Intel Time Stamp Counter register')")
       case(INTRINSIC_TIMER)
@@ -183,6 +183,9 @@ CONTAINS
             write(numout,"('TIMING: using Fortran intrinsic system clock, cycles/sec =',I7,&
                  &   ', max count = ',I11)") iclk_rate, iclk_max
          end if
+
+      case(TOFDAY_TIMER)
+         if(myrank == 0)write (numout,"('TIMING: using C gettimeofday()')")
       end select
 
       nThreads = 1
@@ -365,28 +368,23 @@ CONTAINS
       ith = 1
 !$    ith = 1 + omp_get_thread_num()
 
-      select case(base_timer)
-      case(OMP_TIMER)
-         delta_t = thistime - timer(itag,ith)%istart
-         timer(itag,ith)%total = timer(itag,ith)%total + delta_t             
-         ! If we're recording a time-series then store this result. Currently
-         ! only implemented for the OpenMP timer as awaiting 'time_now()'
-         ! routine being developed in MPI branch.
-         if(record_time_series .AND. &
-            timer(itag,ith)%count < TIME_SERIES_LEN)then
-            timer(itag,ith)%time_series(timer(itag,ith)%count) = REAL(delta_t, kind=sp)
-         end if
-      case(RDTSC_TIMER)
-         timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (thistime - timer(itag,ith)%istart)
-      case(INTRINSIC_TIMER)
+      if(base_timer == INTRINSIC_TIMER)then
          IF( thistime < timer(itag,ith)%istart )THEN
             thistime = thistime + REAL(iclk_max,wp)
          END IF
+      end if
 
-         timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (thistime - timer(itag,ith)%istart)
-      end select
+      delta_t = thistime - timer(itag,ith)%istart
+      timer(itag,ith)%total = timer(itag,ith)%total + delta_t
+
+      ! If we're recording a time-series then store this result. We use
+      ! single precision for this to save space (so as to try to minimise
+      ! the impact of this facility on cache use).
+      if(record_time_series .AND. &
+         timer(itag,ith)%count < TIME_SERIES_LEN)then
+        timer(itag,ith)%time_series(timer(itag,ith)%count) = &
+                                                  REAL(delta_t, kind=sp)
+      end if
 
    END SUBROUTINE timer_stop
 
@@ -442,6 +440,9 @@ CONTAINS
      case(INTRINSIC_TIMER)
         write(timer_str, &
              "('Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
+     case(TOFDAY_TIMER)
+        write(timer_str, &
+             "('Timed using gettimeofday(). Units are seconds.')")
      case default
         return
      end select
