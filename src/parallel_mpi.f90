@@ -1,0 +1,95 @@
+module dl_timer_parallel
+  use mpi
+  !> Module containing all routines that involve calls to MPI routines.
+  implicit none
+
+  ! This kind parameter definition is repeated from dl_timer.f90. We
+  ! could fix this by having a global types module.
+  integer, parameter :: wp = SELECTED_REAL_KIND(12,307)
+
+contains
+
+  function is_parallel()
+    !> Returns .TRUE. to indicate that dl_timer is built with MPI support.
+    !! Aborts if MPI_Init() has not yet been called.
+    logical :: is_parallel
+    integer :: ierr
+
+    call MPI_INITIALIZED(is_parallel, ierr)
+
+    if(.not. is_parallel)then
+      write(*, &
+           "('TIMING: ERROR: timer_init() must be called after MPI_Init()!')")
+      stop
+    end if
+
+  end function is_parallel
+
+  !=========================================================================
+
+  function get_rank()
+    !> Returns the rank of this process in MPI_COMM_WORLD
+    integer :: get_rank
+    integer :: ierr
+    call MPI_COMM_RANK(MPI_COMM_WORLD, get_rank, ierr)
+    return
+  end function get_rank
+
+  !=========================================================================
+
+  function num_ranks()
+    !> Returns the number of ranks in MPI_COMM_WORLD
+    integer :: num_ranks
+    integer :: ierr
+    call MPI_COMM_SIZE(MPI_COMM_WORLD, num_ranks, ierr)
+    return
+  end function num_ranks
+
+  !=========================================================================
+
+  subroutine calc_dm_timer_stats(nThreads, ntimers, &
+                                 times, max_times, min_times, sum_times)
+    integer,                                  intent(in) :: nThreads, ntimers
+    !> The total time spent in each region by each thread on this process
+    real(wp), dimension(ntimers,nThreads),    intent(in) :: times
+    real(wp), dimension(2,ntimers,nThreads), intent(out) :: max_times, min_times
+    real(wp), dimension(ntimers,nThreads),   intent(out) :: sum_times
+    ! Locals
+    real(wp), allocatable, dimension(:,:,:) :: times_ranks
+    integer :: ierr, myrank
+    integer :: jt, itimer
+
+    allocate(times_ranks(2,ntimers,nThreads), Stat=ierr)
+    if(ierr /= 0)then
+       write (*,*) 'TIMING: calc_dm_timer_stats: failed to allocate memory'
+       return
+    end if
+
+    myrank = get_rank()
+
+    ! We must pack the timing data into an array suitable for the
+    ! reduction operations
+    do jt = 1, nThreads, 1
+       do itimer = 1, ntimers !itimerCount(jt)
+          times_ranks(1,itimer,jt) = times(itimer,jt)
+          times_ranks(2,itimer,jt) = myrank
+       end do
+    end do
+
+    ! For each timed region, find the maximum time spent inside it and
+    ! the rank of the corresponding process.
+    ! ARPDBG this is just for thread 1 currently
+    call MPI_Reduce(times_ranks(:,:,1), max_times(:,:,1), ntimers,  &
+                    MPI_2DOUBLE_PRECISION, MPI_MAXLOC, 0,     &
+                    MPI_COMM_WORLD, ierr)
+    ! Ditto for the minimum
+    call MPI_Reduce(times_ranks(:,:,1), min_times(:,:,1), ntimers, &
+                    MPI_2DOUBLE_PRECISION, MPI_MINLOC, 0,    &
+                    MPI_COMM_WORLD, ierr)
+    ! The total time spent in each region summed over all processes
+    call MPI_Reduce(times(:,1), sum_times(:,1), ntimers,  &
+                    MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+    return
+  end subroutine calc_dm_timer_stats
+
+end module dl_timer_parallel
