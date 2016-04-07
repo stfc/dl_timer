@@ -1,10 +1,12 @@
 # README #
 
 This is the README for the dl_timer library. The package aims to provide
-a simple, lightweight and portable timing API.
+a simple, lightweight and portable timing API. It supports both shared-
+memory (OpenMP) and distributed memory (MPI) parallelism. However,
+mixed-mode/hybrid parallelism is not yet supported.
 
-By default the library configured to use the OpenMP timing routine (as that
-has consistently good resolution) so you'll need to at least link
+By default the library is configured to use the OpenMP timing routine (as
+that has consistently good resolution) so you'll need to at least link
 against OpenMP. You can change it to use the intrinsic Fortran timer
 or the Intel RDTSC processor counter.
 
@@ -16,7 +18,7 @@ environment variables:
 * F90      - the command with which to invoke the Fortran compiler
 * F90FLAGS - flags to pass to the compiler, e.g. -g
 * OMPFLAGS - the flag(s) required to enable OpenMP with the chosen compiler
-* MPI_F90  - the wrapper with which to invoke the Fortran compiler
+* MPIF90   - the wrapper with which to invoke the Fortran compiler
              when building (and linking) with MPI
 
 e.g. to build with Gnu Fortran I use:
@@ -29,7 +31,7 @@ e.g. to build with Gnu Fortran I use:
 ## Examples ##
 
 There are examples of the usage of dl_timer in the test directory.
-In short though it is used like so:
+In short though, it is used like so:
 
     use dl_timer
     integer :: itimer0
