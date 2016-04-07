@@ -13,8 +13,7 @@ PROGRAM timer_test
 
   real(r_def) :: mysum
 
-  integer numtasks, rank, ierr, rc, len, i, j
-  character*(MPI_MAX_PROCESSOR_NAME) name
+  integer numtasks, rank, ierr, j
 
   !--------------------------------------------------------------
   ! Initialisation
@@ -23,7 +22,7 @@ PROGRAM timer_test
   call MPI_INIT(ierr)
   if (ierr .ne. MPI_SUCCESS) then
      print *,'Error starting MPI program. Terminating.'
-     call MPI_ABORT(MPI_COMM_WORLD, rc, ierr)
+     call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
   end if
 
   ! Get the number of processors this job is using

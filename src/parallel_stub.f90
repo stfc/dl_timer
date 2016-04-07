@@ -15,7 +15,6 @@ contains
   function is_parallel()
     logical :: is_parallel
     is_parallel = .FALSE.
-    return
   end function is_parallel
 
   !=========================================================================
@@ -24,7 +23,6 @@ contains
     !> No MPI support so we only have one process - rank 0
     integer :: get_rank
     get_rank = 0
-    return
   end function get_rank
 
   !=========================================================================
@@ -33,7 +31,6 @@ contains
     !> No MPI support so we only have a single process
     integer :: num_ranks
     num_ranks = 1
-    return
   end function num_ranks
 
   !=========================================================================
@@ -45,10 +42,9 @@ contains
                                                                   nThreads)
     real(wp), dimension(2,ntimers,nThreads), intent(out) :: max_times, min_times
     real(wp), dimension(ntimers,nThreads),   intent(out) :: sum_times
-    max_times(:,:,:) = 0.0
+    max_times(1,:,:) = times(:,:)
     min_times(:,:,:) = 0.0
     sum_times(:,:) = 0.0
-    return
   end subroutine calc_dm_timer_stats
 
 end module dl_timer_parallel

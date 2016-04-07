@@ -275,7 +275,7 @@ CONTAINS
       !! Used to report a time per interval in the report generated
       !! by timer_report().
       INTEGER, INTENT(in), OPTIONAL :: nrepeat
-      INTEGER :: ji, ith, iclk
+      INTEGER :: ji, ith
 
       IF(LEN_TRIM(label) > LABEL_LEN)THEN
          WRITE(*,"('timer_start: ERROR: length of label >>',(A),'<< exceeds ',I2,' chars')") &
@@ -336,8 +336,7 @@ CONTAINS
       INTEGER, INTENT(in) :: itag ! Flag identifying the timer
       !> Stop the specified timer and record the elapsed number of ticks
       !! since it was started.
-      INTEGER :: iclk, ith
-      INTEGER (kind=int64) :: iclk64
+      INTEGER :: ith
       REAL(wp) :: thistime, delta_t
 
       ! Stop the clock
@@ -376,9 +375,9 @@ CONTAINS
    !==========================================================================
 
    SUBROUTINE timer_report()
-     use dl_timer_parallel, only: is_parallel, get_rank, calc_dm_timer_stats
+     use dl_timer_parallel, only: is_parallel, calc_dm_timer_stats
      implicit none
-     integer       :: jt, itimer, rank
+     integer       :: jt, itimer
      integer       :: ierr
      logical       :: have_repeats
      ! Arrays used to gather stats for each timed region when running
