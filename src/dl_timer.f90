@@ -18,12 +18,14 @@ MODULE dl_timer
    INTEGER, PARAMETER :: INTRINSIC_TIMER=2
    !> Use the C routine gettimeofday() (microsecond precision)
    INTEGER, PARAMETER :: TOFDAY_TIMER=3
+   !> Use the POSIX, montonic clock
+   INTEGER, PARAMETER :: POSIX_TIMER=4
 
    !-------------------------------------------------------------------
    ! Section that configures which timer is used
 
    !> Which timer type to use by default
-   INTEGER :: base_timer = RDTSC_TIMER !TOFDAY_TIMER!OMP_TIMER
+   INTEGER :: base_timer = POSIX_TIMER !RDTSC_TIMER !TOFDAY_TIMER!OMP_TIMER
    !> Whether to record time-series data - currently only supported
    !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
    !! writes out time-line data.
@@ -97,6 +99,16 @@ MODULE dl_timer
         import :: C_DOUBLE
         real(C_DOUBLE) :: time_of_day
       end function time_of_day
+
+      function posix_clock_init() bind(c)
+        import :: C_DOUBLE
+        real(C_DOUBLE) :: posix_clock_init
+      end function posix_clock_init
+
+      function posix_clock() bind(c)
+        import :: C_DOUBLE
+        real(C_DOUBLE) :: posix_clock
+      end function posix_clock
    END INTERFACE
 
   !-------------------------------------------------------------------
@@ -125,6 +137,8 @@ CONTAINS
         time_now = REAL(iclk, wp)
      case(TOFDAY_TIMER)
         time_now = time_of_day()
+     case(POSIX_TIMER)
+        time_now = posix_clock()
      end select
 
    end function time_now
@@ -194,6 +208,14 @@ CONTAINS
 
       case(TOFDAY_TIMER)
          if(myrank == 0)write (numout,"('TIMING: using C gettimeofday()')")
+
+      case(POSIX_TIMER)
+         clock_tick_s = posix_clock_init()
+         if(myrank == 0)then
+            write (numout, "('TIMING: using POSIX monotonic clock.')")
+            write (numout, "('TIMING: reported resolution = ',1E13.5,' (s)')") &
+                  clock_tick_s
+         end if
       end select
 
       nThreads = 1
