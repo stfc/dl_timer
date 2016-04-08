@@ -100,9 +100,10 @@ MODULE dl_timer
         real(C_DOUBLE) :: time_of_day
       end function time_of_day
 
-      function posix_clock_init() bind(c)
-        import :: C_DOUBLE
-        real(C_DOUBLE) :: posix_clock_init
+      function posix_clock_init(resolution) bind(c)
+        import :: C_INT, C_DOUBLE
+        integer(C_INT) :: posix_clock_init
+        real(C_DOUBLE) :: resolution
       end function posix_clock_init
 
       function posix_clock() bind(c)
@@ -210,7 +211,11 @@ CONTAINS
          if(myrank == 0)write (numout,"('TIMING: using C gettimeofday()')")
 
       case(POSIX_TIMER)
-         clock_tick_s = posix_clock_init()
+         if( posix_clock_init(clock_tick_s) /= 1)then
+            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+                          & 'POSIX timer but system does not support it.')")
+            stop
+         end if
          if(myrank == 0)then
             write (numout, "('TIMING: using POSIX monotonic clock.')")
             write (numout, "('TIMING: reported resolution = ',1E13.5,' (s)')") &
@@ -474,6 +479,9 @@ CONTAINS
      case(TOFDAY_TIMER)
         write(timer_str, &
              "('Timed using gettimeofday(). Units are seconds.')")
+     case(POSIX_TIMER)
+        write(timer_str, &
+             "('Timed using POSIX timer. Units are seconds.')")        
      case default
         return
      end select
