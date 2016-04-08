@@ -1,9 +1,6 @@
 # Modules that are independent of which compiler we're using
 # and of whether we're using MPI
-COMMON_MODULES = gettofd.o
-
-INTEL_MODULES = intel_timer_mod.o 
-FAKE_INTEL_MODULES = intel_stub_mod.o
+COMMON_MODULES = gettofd.o intel_timer.o intel_timer_mod.o
 
 SM_MODULES = parallel_stub.o
 DM_MODULES = parallel_mpi.o
@@ -14,23 +11,13 @@ all: sm_build
 # Target for Shared-memory (OpenMP) parallelism
 .PHONY: sm_build
 sm_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${FAKE_INTEL_MODULES} ${SM_MODULES}" \
-                LIB_NAME=${LIB_NAME} FC=${F90} lib
-
-.PHONY: sm_intel_build
-sm_intel_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${INTEL_MODULES} ${SM_MODULES}" \
+	${MAKE} MODULES="${COMMON_MODULES} ${SM_MODULES}" \
                 LIB_NAME=${LIB_NAME} FC=${F90} lib
 
 # Target for Distributed-memory (MPI) parallelism
 .PHONY: dm_build
 dm_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${FAKE_INTEL_MODULES} ${DM_MODULES}" \
-                LIB_NAME=${LIB_NAME} FC=${MPIF90} lib
-
-.PHONY: dm_intel_build
-dm_intel_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${INTEL_MODULES} ${DM_MODULES}" \
+	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" \
                 LIB_NAME=${LIB_NAME} FC=${MPIF90} lib
 
 lib: ${MODULES} dl_timer.o

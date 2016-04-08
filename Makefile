@@ -7,7 +7,7 @@ TEST_DIR = test
 
 all:
 	@echo "Possible make targets are:"
-	@echo "   Build: sm_lib, dm_lib, sm_intel_lib, dm_intel_lib"
+	@echo "   Build: sm_lib (OpenMP support), dm_lib (MPI support)"
 	@echo "   Test: sm_test, dm_test"
 
 # Library with shared memory (OpenMP) support
@@ -16,20 +16,10 @@ sm_lib: ${SRC_DIR}/*.?90
 	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} sm_build
 	mv ${SRC_DIR}/${DLT_LIB} .
 
-.PHONY: sm_intel_lib
-sm_intel_lib: ${SRC_DIR}/*.?90
-	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} sm_intel_build
-	mv ${SRC_DIR}/${DLT_LIB} .
-
 # Library with distributed memory (MPI) support
 .PHONY: dm_lib
 dm_lib: ${SRC_DIR}/*.?90
 	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} dm_build
-	mv ${SRC_DIR}/${DLT_LIB} .
-
-.PHONY: dm_intel_lib
-dm_intel_lib: ${SRC_DIR}/*.?90
-	${MAKE} --directory=${SRC_DIR} LIB_NAME=${DLT_LIB} dm_intel_build
 	mv ${SRC_DIR}/${DLT_LIB} .
 
 # The directory 'test' does actually exist but this target does not

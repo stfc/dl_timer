@@ -11,6 +11,12 @@ MODULE intel_timer_mod
 
    INTERFACE
 
+      FUNCTION rdtsc_available()  bind(C, name="rdtsc_available")
+        USE iso_c_binding
+        IMPLICIT none
+        INTEGER (C_INT) :: rdtsc_available
+      END FUNCTION rdtsc_available
+
       FUNCTION getticks()  bind(C, name="getticks")
         USE iso_c_binding
         IMPLICIT none
