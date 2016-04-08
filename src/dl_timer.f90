@@ -22,22 +22,18 @@ MODULE dl_timer
    !-------------------------------------------------------------------
    ! Section that configures which timer is used
 
-   !> Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
-   !! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
-   !! is used.
-   LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
    !> Which timer type to use by default
-   INTEGER :: base_timer = TOFDAY_TIMER!OMP_TIMER
+   INTEGER :: base_timer = RDTSC_TIMER !TOFDAY_TIMER!OMP_TIMER
    !> Whether to record time-series data - currently only supported
    !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
    !! writes out time-line data.
-   LOGICAL, PARAMETER :: record_time_series = .FALSE.
+   LOGICAL, PARAMETER :: record_time_series = .TRUE.
 
    !------------------------------------------------------------------
    ! Type definitions
-   !: double precision (real 8)
+   !> double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
-   ! Single precision
+   !> Single precision
    INTEGER, PARAMETER :: sp = KIND(1.0)
 
    !> Tolerance below which we consider a number to be zero
@@ -142,6 +138,7 @@ CONTAINS
       INTEGER :: ji, ith, ierr
       integer :: myrank
       logical :: dm_parallel
+      character(len=10) :: units_str
 
       ! Query whether or not we have been built DM parallel. If we have
       ! but MPI_Init() has not yet been called then we abort.
@@ -162,6 +159,7 @@ CONTAINS
       ! Initialise the timer structures
       iclk_rate = 1
       iclk_max = 1
+      units_str = "s"
 
       select case(base_timer)
 
@@ -174,14 +172,24 @@ CONTAINS
          end if
 
       case(RDTSC_TIMER)
+         ! Check that the RDTSC timer is available (must have been compiled
+         ! with the Intel compiler). If it isn't then we abort.
+         if(rdtsc_available() /= 1)then
+            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+                          & 'RDTSC but not built with Intel compiler.')")
+            stop
+         end if
+         units_str = "counts"
          clock_tick_s = 1.0d0 ! TODO work out how to get this quantity
-         if(myrank == 0)write (*,"('TIMING: using Intel Time Stamp Counter register')")
+         if(myrank == 0)write (numout, &
+                           "('TIMING: using Intel Time Stamp Counter register')")
       case(INTRINSIC_TIMER)
          call SYSTEM_CLOCK(COUNT_RATE=iclk_rate, COUNT_MAX=iclk_max)
          clock_tick_s = 1.0d0/REAL(iclk_rate)
          if(myrank == 0)then
-            write(numout,"('TIMING: using Fortran intrinsic system clock, cycles/sec =',I7,&
-                 &   ', max count = ',I11)") iclk_rate, iclk_max
+            write(numout,"('TIMING: using Fortran intrinsic system clock, ' &
+                         & 'cycles/sec =',I7,', max count = ',I11)")        &
+                  iclk_rate, iclk_max
          end if
 
       case(TOFDAY_TIMER)
@@ -192,9 +200,9 @@ CONTAINS
 !$    nThreads = omp_get_max_threads()
 
       if(myrank == 0)then
-         write (numout,                                                       &
-                "('TIMING: effective clock granularity = ', 1E13.5,' (s)')")  &
-                timer_granularity()
+         write (numout,                                                             &
+                "('TIMING: effective clock granularity = ', 1E13.5,' (',(A),')')")  &
+                 timer_granularity(), TRIM(units_str)
          write (numout,                                                       &
                 "('TIMING: Allocating timer structures for ',I3,' threads.')")&
                 nThreads
@@ -205,7 +213,7 @@ CONTAINS
 
       IF(ierr /= 0)THEN
          WRITE (numout,*) 'init_time: ERROR: failed to allocate timer structures'
-         RETURN
+         stop
       END IF
 
       ! Allocate memory required for recording time-series data
@@ -215,7 +223,8 @@ CONTAINS
                allocate(timer(ji,ith)%time_series(TIME_SERIES_LEN), &
                         Stat=ierr)
                if(ierr /= 0)then
-                  write (numout,*) 'init_time: ERROR: failed to allocate time-series array'
+                  write (numout, &
+                       "('init_time: ERROR: failed to allocate time-series array')")
                   return
                end if
             END DO
@@ -501,7 +510,7 @@ CONTAINS
 
             DO ji=1,itimerCount(jt),1
 
-               IF(use_rdtsc_timer)THEN
+               IF(base_timer == RDTSC_TIMER)THEN
                   wtime = timer(ji,jt)%total
                ELSE
                   wtime = time_in_s(0._wp,timer(ji,jt)%total)
@@ -547,7 +556,7 @@ CONTAINS
 
            do ji=1,itimerCount(jt),1
 
-              if(use_rdtsc_timer)then
+              if(base_timer == RDTSC_TIMER)then
                  wtime = timer(ji,jt)%total
               else
                  wtime = time_in_s(0._wp,timer(ji,jt)%total)
