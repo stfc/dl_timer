@@ -12,6 +12,11 @@ or the Intel RDTSC processor counter.
 
 ##  Building ##
 
+Two makefile targets are supported; sm_lib and dm_lib (for shared-memory
+and distributed-memory support, respectively). If OpenMP support is
+required then OMPFLAGS must be set appropriately (see below). In order
+to compile the dm_lib target you will require a working MPI installation.
+
 The Makefiles pick up the compiler to use etc. from the following
 environment variables:
 
@@ -19,7 +24,8 @@ environment variables:
 * F90FLAGS - flags to pass to the compiler, e.g. -g
 * OMPFLAGS - the flag(s) required to enable OpenMP with the chosen compiler
 * MPIF90   - the wrapper with which to invoke the Fortran compiler
-             when building (and linking) with MPI
+             when building (and linking) with MPI. N.B. this is only
+             required if MPI support is desired - i.e. the dm_lib target.
 
 e.g. to build with Gnu Fortran I use:
 
@@ -27,6 +33,9 @@ e.g. to build with Gnu Fortran I use:
     export F90FLAGS=-g
     export OMPFLAGS=-fopenmp
     export MPIF90=mpif90
+
+Common ways to set these variables for various compilers are provided in
+the compiler_setup directory.
 
 ## Examples ##
 
