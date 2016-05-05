@@ -1,7 +1,7 @@
 !> Simple program to test the granularity/overhead of the timing API
 !! This code should be run pinned to a single core and for a duration
 !! sufficient to ensure the OS has migrated other processes off the
-!! chose core.
+!! chosen core.
 PROGRAM timer_test_granularity
   use dl_timer
 

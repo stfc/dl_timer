@@ -25,11 +25,11 @@ MODULE dl_timer
    ! Section that configures which timer is used
 
    !> Which timer type to use by default
-   INTEGER :: base_timer = POSIX_TIMER !RDTSC_TIMER !TOFDAY_TIMER!OMP_TIMER
+   INTEGER :: base_timer = POSIX_TIMER
    !> Whether to record time-series data - currently only supported
    !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
    !! writes out time-line data.
-   LOGICAL, PARAMETER :: record_time_series = .TRUE.
+   LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
    !------------------------------------------------------------------
    ! Type definitions
