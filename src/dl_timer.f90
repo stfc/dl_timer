@@ -526,11 +526,11 @@ CONTAINS
       rank = get_rank()
       if(rank == 0)then
 
-         WRITE(*,"(/22('='),' Timing report ',22('='))")
+         WRITE(*,"(/31('='),' Timing report ',31('='))")
          WRITE(*,"(4x, (A))") TRIM(timer_str)
-         WRITE(*,"(67('-'))")
-         WRITE(*,"('Region',26x,'Counts',6x,'Total',9x,'Average',6x,'Error')")
-         WRITE(*,"(67('-'))")
+         WRITE(*,"(77('-'))")
+         WRITE(*,"('Region',26x,'Counts',5x,'Total',8x,'Average',5x,'Error')")
+         WRITE(*,"(77('-'))")
          DO jt = 1, nThreads, 1
 
             IF(itimerCount(jt) > 0 .AND. nThreads > 1)THEN
@@ -547,13 +547,13 @@ CONTAINS
                END IF
 
                ! Truncate the label to 32 chars for table-formatting purposes
-               WRITE(*,"((A),1x,I5,1x,E13.6,2x,E13.6,1x,E13.6)") &
+               WRITE(*,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
                             timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
                             wtime, wtime/REAL(timer(ji,jt)%count), &
                             time_err(timer(ji,jt)%count)
             END DO
          END DO
-         WRITE(*," (67('='))")
+         WRITE(*," (77('='))")
       end if
    END SUBROUTINE timer_report_no_repeats
 
@@ -572,15 +572,15 @@ CONTAINS
      rank = get_rank()
      if(rank == 0)then
 
-        write(*,"(/34('='),' Timing report ',34('='))")
+        write(*,"(/36('='),' Timing report ',36('='))")
         write(*,"(4x,(A))") TRIM(timer_str)
-        write(*,"(83('-'))")
-        write(*,"('Region',26x,'Counts',6x,'Total',9x,' Average    Average/repeat   Error')")
-        write(*,"(83('-'))")
+        write(*,"(88('-'))")
+        write(*,"('Region',26x,'Counts',6x,'Total',7x,' Average    Avg/repeat   Error')")
+        write(*,"(88('-'))")
         do jt = 1, nThreads, 1
 
            if(itimerCount(jt) > 0 .AND. nThreads > 1)then
-              if(jt > 1) WRITE(*, "(34('- '))")
+              if(jt > 1) WRITE(*, "(36('- '))")
               WRITE(*," ('Thread ',I3)") jt-1
            end if
 
@@ -598,7 +598,7 @@ CONTAINS
               ! timed region
               trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
               ! Truncate the label to 32 chars for table-formatting purposes
-              write(*,"((A),1x,I6,1x,E13.6,1x,E13.6,1x,E13.6,1x,E13.6)")  &
+              write(*,"((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")  &
                    timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
                    wtime, tmean, trepeat,                                 & 
                    ! Error estimate using quadrature formula for
@@ -607,7 +607,7 @@ CONTAINS
                    trepeat*time_err(timer(ji,jt)%count)/tmean
            end do
         end do
-        write(*,"(83('='))")
+        write(*,"(88('='))")
      end if
    END SUBROUTINE timer_report_with_repeats
 
