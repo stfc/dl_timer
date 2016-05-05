@@ -258,18 +258,9 @@ CONTAINS
          END DO
       END IF
 
-!$OMP PARALLEL DO default(none), shared(nThreads,itimerCount,timer), &
-!$OMP             private(ith, ji)
-      DO ith = 1, nThreads, 1
-         DO ji=1,MAX_TIMERS,1
-            itimerCount(ith) = 0
-            timer(ji,ith)%label  = ""
-            timer(ji,ith)%istart = 0_int64
-            timer(ji,ith)%total  = 0_wp
-            timer(ji,ith)%count  = 0
-         END DO
-      END DO
-!$OMP END PARALLEL DO
+      call clear_timers()
+
+      call estimate_systematic_error()
 
    END SUBROUTINE timer_init
 
@@ -301,6 +292,64 @@ CONTAINS
      end do
      timer_granularity = min_diff
    end function timer_granularity
+
+   !=========================================================================
+
+   subroutine estimate_systematic_error()
+     implicit none
+     !> Estimate the systematic error associated with dl_timer
+     integer, parameter :: ntimes = 50000
+     integer :: i, itime
+     real(wp) :: sys_err
+
+     ! We time a completely empty region using the full dl_timer 'public'
+     ! API...
+     do i=1, ntimes
+        call timer_start('Empty region', itime)
+        call timer_stop(itime)
+     end do
+
+     do i=1, MAX_TIMERS
+        if (TRIM(timer(i,1)%label) == 'Empty region') exit
+     end do
+
+     if (i > MAX_TIMERS) then
+        write (*,*) 'TIMER: ERROR - estimation of systematic error failed!'
+        return
+     end if
+
+     sys_err = timer(i,1)%total / REAL(timer(i,1)%count, wp)
+     write (*,*) 'Systematic error estimate = ', sys_err
+
+     ! Reset our timers
+     call clear_timers()
+
+   end subroutine estimate_systematic_error
+
+   !=========================================================================
+
+   subroutine clear_timers()
+     implicit none
+     !> Clear all accumulated timing data
+     integer :: ith, ji
+
+!$OMP PARALLEL DO default(none), shared(nThreads,itimerCount,timer), &
+!$OMP             private(ith, ji)
+      DO ith = 1, nThreads, 1
+         DO ji=1,MAX_TIMERS,1
+            itimerCount(ith) = 0
+            timer(ji,ith)%label  = ""
+            timer(ji,ith)%istart = 0_int64
+            timer(ji,ith)%total  = 0_wp
+            timer(ji,ith)%count  = 0
+            if(RECORD_TIME_SERIES)then
+               timer(ji,ith)%time_series(:) = 0.0
+            end if
+         END DO
+      END DO
+!$OMP END PARALLEL DO
+
+   end subroutine clear_timers
 
    !=========================================================================
 
