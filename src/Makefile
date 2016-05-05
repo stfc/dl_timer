@@ -1,5 +1,6 @@
-# Modules that are independent of whether we're using MPI
-COMMON_MODULES = intel_timer_mod.o
+# Modules that are independent of which compiler we're using
+# and of whether we're using MPI
+COMMON_MODULES = posix_clock.o gettofd.o intel_timer.o intel_timer_mod.o
 
 SM_MODULES = parallel_stub.o
 DM_MODULES = parallel_mpi.o
@@ -7,13 +8,17 @@ DM_MODULES = parallel_mpi.o
 # Build non-mpi version by default
 all: sm_build
 
+# Target for Shared-memory (OpenMP) parallelism
 .PHONY: sm_build
 sm_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${SM_MODULES}" LIB_NAME=${LIB_NAME} FC=${F90} lib
+	${MAKE} MODULES="${COMMON_MODULES} ${SM_MODULES}" \
+                LIB_NAME=${LIB_NAME} FC=${F90} lib
 
+# Target for Distributed-memory (MPI) parallelism
 .PHONY: dm_build
 dm_build:
-	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" LIB_NAME=${LIB_NAME} FC=${MPIF90} lib
+	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" \
+                LIB_NAME=${LIB_NAME} FC=${MPIF90} lib
 
 lib: ${MODULES} dl_timer.o
 	${AR} ${ARFLAGS} ${LIB_NAME} ${MODULES} dl_timer.o
@@ -41,3 +46,6 @@ parallel_mpi.o: parallel_mpi.f90
 
 %.o: %.F90
 	$(F90) $(F90FLAGS) -c $<
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $<

@@ -1,6 +1,6 @@
 MODULE dl_timer
-
-  USE intel_timer_mod
+  use iso_c_binding
+  use intel_timer_mod
 !$ USE omp_lib
   IMPLICIT none
 
@@ -10,22 +10,22 @@ MODULE dl_timer
    ! Define some constants to identify the different timers that
    ! we support
 
-   ! Intel-specific rdtsc timer (reads the Time Stamp Counter register)
+   !> Intel-specific rdtsc timer (reads the Time Stamp Counter register)
    INTEGER, PARAMETER :: RDTSC_TIMER = 0
-   ! Use the OpenMP wtime routine (must link against OpenMP)
+   !> Use the OpenMP wtime routine (must link against OpenMP)
    INTEGER, PARAMETER :: OMP_TIMER=1
-   ! Use the Fortran intrinsic timer (precision may be limited)
+   !> Use the Fortran intrinsic timer (precision may be limited)
    INTEGER, PARAMETER :: INTRINSIC_TIMER=2
+   !> Use the C routine gettimeofday() (microsecond precision)
+   INTEGER, PARAMETER :: TOFDAY_TIMER=3
+   !> Use the POSIX, montonic clock
+   INTEGER, PARAMETER :: POSIX_TIMER=4
 
    !-------------------------------------------------------------------
    ! Section that configures which timer is used
 
-   !> Whether to use the Intel-specific rdtsc timer (reads the Time Stamp 
-   !! Counter register). If false then the Fortran intrinsic SYSTEM_CLOCK 
-   !! is used.
-   LOGICAL, PARAMETER :: use_rdtsc_timer = .FALSE.
    !> Which timer type to use by default
-   INTEGER :: base_timer = OMP_TIMER
+   INTEGER :: base_timer = POSIX_TIMER
    !> Whether to record time-series data - currently only supported
    !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
    !! writes out time-line data.
@@ -33,9 +33,9 @@ MODULE dl_timer
 
    !------------------------------------------------------------------
    ! Type definitions
-   !: double precision (real 8)
+   !> double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
-   ! Single precision
+   !> Single precision
    INTEGER, PARAMETER :: sp = KIND(1.0)
 
    !> Tolerance below which we consider a number to be zero
@@ -87,6 +87,31 @@ MODULE dl_timer
    !> The number of timed regions created for each thread
    INTEGER, ALLOCATABLE, SAVE, DIMENSION(:) :: itimerCount
    
+   !-------------------------------------------------------------------
+   ! Interfaces to other routines
+
+   INTERFACE
+      !> Wrapper for the C code that calls gettimeofday which has
+      !! microsecond resolution.
+      function time_of_day() bind(c)
+        ! An interface body does not automatically import names from
+        ! surrounding scope
+        import :: C_DOUBLE
+        real(C_DOUBLE) :: time_of_day
+      end function time_of_day
+
+      function posix_clock_init(resolution) bind(c)
+        import :: C_INT, C_DOUBLE
+        integer(C_INT) :: posix_clock_init
+        real(C_DOUBLE) :: resolution
+      end function posix_clock_init
+
+      function posix_clock() bind(c)
+        import :: C_DOUBLE
+        real(C_DOUBLE) :: posix_clock
+      end function posix_clock
+   END INTERFACE
+
   !-------------------------------------------------------------------
   ! Publicly-accessible routines
 
@@ -111,6 +136,10 @@ CONTAINS
      case(INTRINSIC_TIMER)
         CALL SYSTEM_CLOCK(iclk)
         time_now = REAL(iclk, wp)
+     case(TOFDAY_TIMER)
+        time_now = time_of_day()
+     case(POSIX_TIMER)
+        time_now = posix_clock()
      end select
 
    end function time_now
@@ -124,6 +153,7 @@ CONTAINS
       INTEGER :: ji, ith, ierr
       integer :: myrank
       logical :: dm_parallel
+      character(len=10) :: units_str
 
       ! Query whether or not we have been built DM parallel. If we have
       ! but MPI_Init() has not yet been called then we abort.
@@ -142,28 +172,54 @@ CONTAINS
 !$    END IF
 
       ! Initialise the timer structures
+      iclk_rate = 1
+      iclk_max = 1
+      units_str = "s"
+
       select case(base_timer)
 
       case(OMP_TIMER)
-         iclk_rate = 1
-         iclk_max = 1
 !$       clock_tick_s = omp_get_wtick()
          if(myrank == 0)then
             write (numout,"('TIMING: using OpenMP omp_get_wtime()')")
             write (numout,"('TIMING: time between clock ticks =',1E13.5,' (s)')") &
                  clock_tick_s
          end if
+
       case(RDTSC_TIMER)
-         iclk_rate = 1
-         iclk_max = 1
+         ! Check that the RDTSC timer is available (must have been compiled
+         ! with the Intel compiler). If it isn't then we abort.
+         if(rdtsc_available() /= 1)then
+            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+                          & 'RDTSC but not built with Intel compiler.')")
+            stop
+         end if
+         units_str = "counts"
          clock_tick_s = 1.0d0 ! TODO work out how to get this quantity
-         if(myrank == 0)write (*,"('TIMING: using Intel Time Stamp Counter register')")
+         if(myrank == 0)write (numout, &
+                           "('TIMING: using Intel Time Stamp Counter register')")
       case(INTRINSIC_TIMER)
          call SYSTEM_CLOCK(COUNT_RATE=iclk_rate, COUNT_MAX=iclk_max)
          clock_tick_s = 1.0d0/REAL(iclk_rate)
          if(myrank == 0)then
-            write(numout,"('TIMING: using Fortran intrinsic system clock, cycles/sec =',I7,&
-                 &   ', max count = ',I11)") iclk_rate, iclk_max
+            write(numout,"('TIMING: using Fortran intrinsic system clock, ' &
+                         & 'cycles/sec =',I7,', max count = ',I11)")        &
+                  iclk_rate, iclk_max
+         end if
+
+      case(TOFDAY_TIMER)
+         if(myrank == 0)write (numout,"('TIMING: using C gettimeofday()')")
+
+      case(POSIX_TIMER)
+         if( posix_clock_init(clock_tick_s) /= 1)then
+            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+                          & 'POSIX timer but system does not support it.')")
+            stop
+         end if
+         if(myrank == 0)then
+            write (numout, "('TIMING: using POSIX monotonic clock.')")
+            write (numout, "('TIMING: reported resolution = ',1E13.5,' (s)')") &
+                  clock_tick_s
          end if
       end select
 
@@ -171,9 +227,9 @@ CONTAINS
 !$    nThreads = omp_get_max_threads()
 
       if(myrank == 0)then
-         write (numout,                                                       &
-                "('TIMING: effective clock granularity = ', 1E13.5,' (s)')")  &
-                timer_granularity()
+         write (numout,                                                             &
+                "('TIMING: effective clock granularity = ', 1E13.5,' (',(A),')')")  &
+                 timer_granularity(), TRIM(units_str)
          write (numout,                                                       &
                 "('TIMING: Allocating timer structures for ',I3,' threads.')")&
                 nThreads
@@ -184,7 +240,7 @@ CONTAINS
 
       IF(ierr /= 0)THEN
          WRITE (numout,*) 'init_time: ERROR: failed to allocate timer structures'
-         RETURN
+         stop
       END IF
 
       ! Allocate memory required for recording time-series data
@@ -194,7 +250,8 @@ CONTAINS
                allocate(timer(ji,ith)%time_series(TIME_SERIES_LEN), &
                         Stat=ierr)
                if(ierr /= 0)then
-                  write (numout,*) 'init_time: ERROR: failed to allocate time-series array'
+                  write (numout, &
+                       "('init_time: ERROR: failed to allocate time-series array')")
                   return
                end if
             END DO
@@ -347,28 +404,23 @@ CONTAINS
       ith = 1
 !$    ith = 1 + omp_get_thread_num()
 
-      select case(base_timer)
-      case(OMP_TIMER)
-         delta_t = thistime - timer(itag,ith)%istart
-         timer(itag,ith)%total = timer(itag,ith)%total + delta_t             
-         ! If we're recording a time-series then store this result. Currently
-         ! only implemented for the OpenMP timer as awaiting 'time_now()'
-         ! routine being developed in MPI branch.
-         if(record_time_series .AND. &
-            timer(itag,ith)%count < TIME_SERIES_LEN)then
-            timer(itag,ith)%time_series(timer(itag,ith)%count) = REAL(delta_t, kind=sp)
-         end if
-      case(RDTSC_TIMER)
-         timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (thistime - timer(itag,ith)%istart)
-      case(INTRINSIC_TIMER)
+      if(base_timer == INTRINSIC_TIMER)then
          IF( thistime < timer(itag,ith)%istart )THEN
             thistime = thistime + REAL(iclk_max,wp)
          END IF
+      end if
 
-         timer(itag,ith)%total = timer(itag,ith)%total + &
-                          (thistime - timer(itag,ith)%istart)
-      end select
+      delta_t = thistime - timer(itag,ith)%istart
+      timer(itag,ith)%total = timer(itag,ith)%total + delta_t
+
+      ! If we're recording a time-series then store this result. We use
+      ! single precision for this to save space (so as to try to minimise
+      ! the impact of this facility on cache use).
+      if(record_time_series .AND. &
+         timer(itag,ith)%count < TIME_SERIES_LEN)then
+        timer(itag,ith)%time_series(timer(itag,ith)%count) = &
+                                                  REAL(delta_t, kind=sp)
+      end if
 
    END SUBROUTINE timer_stop
 
@@ -424,6 +476,12 @@ CONTAINS
      case(INTRINSIC_TIMER)
         write(timer_str, &
              "('Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
+     case(TOFDAY_TIMER)
+        write(timer_str, &
+             "('Timed using gettimeofday(). Units are seconds.')")
+     case(POSIX_TIMER)
+        write(timer_str, &
+             "('Timed using POSIX timer. Units are seconds.')")        
      case default
         return
      end select
@@ -482,7 +540,7 @@ CONTAINS
 
             DO ji=1,itimerCount(jt),1
 
-               IF(use_rdtsc_timer)THEN
+               IF(base_timer == RDTSC_TIMER)THEN
                   wtime = timer(ji,jt)%total
                ELSE
                   wtime = time_in_s(0._wp,timer(ji,jt)%total)
@@ -528,7 +586,7 @@ CONTAINS
 
            do ji=1,itimerCount(jt),1
 
-              if(use_rdtsc_timer)then
+              if(base_timer == RDTSC_TIMER)then
                  wtime = timer(ji,jt)%total
               else
                  wtime = time_in_s(0._wp,timer(ji,jt)%total)
