@@ -570,7 +570,8 @@ CONTAINS
           systematic_err(1), systematic_err(2), TRIM(units_str)
      nlines = nlines + 1
      write (timer_str(nlines), &
-          "('Measured overhead in calling start/stop = ',1E11.5,' (',(A),')')") overhead, TRIM(units_str)
+        "('Measured overhead in calling start/stop = ',1E11.5,' (',(A),')')") &
+        overhead, TRIM(units_str)
 
      ! Check whether any of our timed regions have a non-unity
      ! no. of repeats.
@@ -613,36 +614,36 @@ CONTAINS
       rank = get_rank()
       if(rank == 0)then
 
-         WRITE(numout,"(/31('='),' Timing report ',31('='))")
-         WRITE(numout,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
-         WRITE(numout,"(77('-'))")
-         WRITE(numout,"('Region',26x,'Counts',5x,'Total',7x,'Average*',5x,'Std Err')")
-         WRITE(numout,"(77('-'))")
-         DO jt = 1, nThreads, 1
+         call write_report_header(77, timer_str, nlines)
+         write(numout, &
+              "('Region',26x,'Counts',5x,'Total',7x,'Average*',5x,'Std Err')")
+         write(numout,"(77('-'))")
 
-            IF(itimerCount(jt) > 0 .AND. nThreads > 1)THEN
-               if(jt > 1) WRITE(numout, "(34('- '))")
-               WRITE(numout," ('Thread ',I3)") jt-1
+         do jt = 1, nThreads, 1
+
+            if(itimerCount(jt) > 0 .AND. nThreads > 1)then
+               if(jt > 1) write(numout, "(34('- '))")
+               write(numout, " ('Thread ',I3)") jt-1
             end if
 
-            DO ji=1,itimerCount(jt),1
+            do ji=1, itimerCount(jt), 1
 
-               IF(base_timer == RDTSC_TIMER)THEN
+               if(base_timer == RDTSC_TIMER)then
                   wtime = timer(ji,jt)%total
-               ELSE
+               else
                   wtime = time_in_s(0._wp,timer(ji,jt)%total)
-               END IF
+               end if
 
                ! Truncate the label to 32 chars for table-formatting purposes
-               WRITE(numout,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
+               write(numout,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
                             timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
                             wtime, &
                             MAX(wtime/REAL(timer(ji,jt)%count)-systematic_err(1), 0.0d0), &
                             time_err(timer(ji,jt))
-            END DO
-         END DO
+            end do
+         end do
 
-        call write_report_footer(88)
+        call write_report_footer(77)
       end if
    END SUBROUTINE timer_report_no_repeats
 
@@ -662,11 +663,10 @@ CONTAINS
      rank = get_rank()
      if(rank == 0)then
 
-        write(numout,"(/36('='),' Timing report ',36('='))")
-        write(numout,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
-        write(numout,"(88('-'))")
+        call write_report_header(88, timer_str, nlines)
         write(numout,"('Region',26x,'Counts',6x,'Total',7x,'Average*   Avg/repeat*  Std Err')")
         write(numout,"(88('-'))")
+
         do jt = 1, nThreads, 1
 
            if(itimerCount(jt) > 0 .AND. nThreads > 1)then
@@ -728,9 +728,7 @@ CONTAINS
 
      if(rank == 0)then
 
-        write(numout,"(/34('='),' Timing report ',34('='))")
-        write(numout,"((A))") (TRIM(timer_str(ji)), ji=1, nlines)
-        write(numout,"(83('-'))")
+        call write_report_header(83, timer_str, nlines)
         write(numout,"(23x,'Counts',21x,'Time per repeat*')")
         write(numout,"('Region',14x,'Explicit(Implt)',2x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
         write(numout,"(83('-'))")
@@ -777,6 +775,26 @@ CONTAINS
 
    !===================================================================
 
+   subroutine write_report_header(width, timer_str, nlines)
+     !> Write the header section of the timer report
+     implicit none
+     integer, intent(in) :: width, nlines
+     character(len=*), intent(in) :: timer_str(nlines)
+     character(len=3) :: width_str, halfwidth_str
+     integer :: ji
+
+     write(width_str, "(I3)") width
+     write(halfwidth_str, "(I3)") (width-15)/2
+
+     write(numout,"(/"//TRIM(halfwidth_str)//"('='),' Timing report ',"// &
+          & TRIM(halfwidth_str)//"('='))")
+     write(numout,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
+     write(numout,"("//TRIM(width_str)//"('-'))")
+
+   end subroutine write_report_header
+
+   !===================================================================
+
    subroutine write_report_footer(width)
      !> Write the footer section of the timer report
      implicit none
@@ -786,7 +804,7 @@ CONTAINS
 
      write(numout, "("//TRIM(width_str)//"('-'))")
      write(numout,"('* corrected for systematic error')")
-     write(numout, "("//TRIM(width_str)//"('='))")
+     write(numout, "("//TRIM(width_str)//"('=')/)")
 
    end subroutine write_report_footer
 
