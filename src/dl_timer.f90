@@ -47,10 +47,12 @@ MODULE dl_timer
    !-------------------------------------------------------------------
    ! Parameters and types for the timing routines
 
-   INTEGER :: iclk_rate ! Ticks per second of Fortran timer
-   INTEGER :: iclk_max  ! Max value that Fortran timer can return
-   REAL(wp) :: clock_tick_s ! Time in seconds between clock ticks
-
+   INTEGER :: iclk_rate !< Ticks per second of Fortran timer
+   INTEGER :: iclk_max  !< Max value that Fortran timer can return
+   REAL(wp) :: clock_tick_s !< Time in seconds between clock ticks
+   REAL(wp) :: systematic_err(2) !< Measured systematic error (in the
+                                 !! units of the chosen clock) and 
+                                 !! associated std err
    !> Maximum length of the label for a timed region
    INTEGER, PARAMETER :: LABEL_LEN  = 128
    !> Maximum number of distinct timed regions that an application
@@ -67,6 +69,9 @@ MODULE dl_timer
       !> Total time spent in this timed region (accumulated over
       !! all visits).
       REAL       (KIND=wp)  :: total
+      !> Sum of the square of the times spent in this timed region
+      !! (accumulated over all visits).
+      REAL       (KIND=wp)  :: totalsq
       !> The no. of times this timed region has been executed.
       INTEGER               :: count
       !> The no. of repeated intervals within this timed region.
@@ -153,7 +158,6 @@ CONTAINS
       INTEGER :: ji, ith, ierr
       integer :: myrank
       logical :: dm_parallel
-      character(len=10) :: units_str
 
       ! Query whether or not we have been built DM parallel. If we have
       ! but MPI_Init() has not yet been called then we abort.
@@ -174,17 +178,11 @@ CONTAINS
       ! Initialise the timer structures
       iclk_rate = 1
       iclk_max = 1
-      units_str = "s"
 
       select case(base_timer)
 
       case(OMP_TIMER)
 !$       clock_tick_s = omp_get_wtick()
-         if(myrank == 0)then
-            write (numout,"('TIMING: using OpenMP omp_get_wtime()')")
-            write (numout,"('TIMING: time between clock ticks =',1E13.5,' (s)')") &
-                 clock_tick_s
-         end if
 
       case(RDTSC_TIMER)
          ! Check that the RDTSC timer is available (must have been compiled
@@ -194,21 +192,14 @@ CONTAINS
                           & 'RDTSC but not built with Intel compiler.')")
             stop
          end if
-         units_str = "counts"
          clock_tick_s = 1.0d0 ! TODO work out how to get this quantity
-         if(myrank == 0)write (numout, &
-                           "('TIMING: using Intel Time Stamp Counter register')")
+
       case(INTRINSIC_TIMER)
          call SYSTEM_CLOCK(COUNT_RATE=iclk_rate, COUNT_MAX=iclk_max)
          clock_tick_s = 1.0d0/REAL(iclk_rate)
-         if(myrank == 0)then
-            write(numout,"('TIMING: using Fortran intrinsic system clock, ' &
-                         & 'cycles/sec =',I7,', max count = ',I11)")        &
-                  iclk_rate, iclk_max
-         end if
 
       case(TOFDAY_TIMER)
-         if(myrank == 0)write (numout,"('TIMING: using C gettimeofday()')")
+         continue
 
       case(POSIX_TIMER)
          if( posix_clock_init(clock_tick_s) /= 1)then
@@ -216,24 +207,10 @@ CONTAINS
                           & 'POSIX timer but system does not support it.')")
             stop
          end if
-         if(myrank == 0)then
-            write (numout, "('TIMING: using POSIX monotonic clock.')")
-            write (numout, "('TIMING: reported resolution = ',1E13.5,' (s)')") &
-                  clock_tick_s
-         end if
       end select
 
       nThreads = 1
 !$    nThreads = omp_get_max_threads()
-
-      if(myrank == 0)then
-         write (numout,                                                             &
-                "('TIMING: effective clock granularity = ', 1E13.5,' (',(A),')')")  &
-                 timer_granularity(), TRIM(units_str)
-         write (numout,                                                       &
-                "('TIMING: Allocating timer structures for ',I3,' threads.')")&
-                nThreads
-      end if
 
       ALLOCATE(timer(MAX_TIMERS,nThreads), itimerCount(nThreads), &
                Stat=ierr)
@@ -260,6 +237,9 @@ CONTAINS
 
       call clear_timers()
 
+      ! We have to estimate our systematic error here because we use the
+      ! dl_timer data structures to do that and so we must wipe them
+      ! afterwards.
       call estimate_systematic_error()
 
    END SUBROUTINE timer_init
@@ -272,7 +252,7 @@ CONTAINS
      !> Measure the effective granularity of the timer by calling
      !! it repeatedly and looking at the minimum amount of time
      !! between the times it returns
-     integer, parameter :: ntimes = 10000
+     integer,  parameter :: ntimes = 10000
      real(wp), parameter :: tol_zero = 1.0E-10
      real(wp) :: times(ntimes)
      real(wp) :: diff, min_diff
@@ -299,16 +279,20 @@ CONTAINS
      implicit none
      !> Estimate the systematic error associated with dl_timer
      integer, parameter :: ntimes = 50000
-     integer :: i, itime
+     integer :: i, itime1, itime2
      real(wp) :: sys_err
 
      ! We time a completely empty region using the full dl_timer 'public'
      ! API...
+     call timer_start('Timed region', itime1)
      do i=1, ntimes
-        call timer_start('Empty region', itime)
-        call timer_stop(itime)
+        call timer_start('Empty region', itime2)
+        call timer_stop(itime2)
      end do
+     call timer_stop(itime1)
 
+     ! The timed region should be the 2nd timer in our data structure
+     ! but just in case it isn't we search for it...
      do i=1, MAX_TIMERS
         if (TRIM(timer(i,1)%label) == 'Empty region') exit
      end do
@@ -318,8 +302,10 @@ CONTAINS
         return
      end if
 
-     sys_err = timer(i,1)%total / REAL(timer(i,1)%count, wp)
-     write (*,*) 'Systematic error estimate = ', sys_err
+     ! Calculate and store the average time spent 'doing nothing'.
+     ! This is then reported in timer_report() at the end of the run.
+     systematic_err(1) = timer(i,1)%total / REAL(timer(i,1)%count, wp)
+     systematic_err(2) = time_err(timer(i,1))
 
      ! Reset our timers
      call clear_timers()
@@ -341,6 +327,7 @@ CONTAINS
             timer(ji,ith)%label  = ""
             timer(ji,ith)%istart = 0_int64
             timer(ji,ith)%total  = 0_wp
+            timer(ji,ith)%totalsq= 0_wp
             timer(ji,ith)%count  = 0
             if(RECORD_TIME_SERIES)then
                timer(ji,ith)%time_series(:) = 0.0
@@ -461,6 +448,7 @@ CONTAINS
 
       delta_t = thistime - timer(itag,ith)%istart
       timer(itag,ith)%total = timer(itag,ith)%total + delta_t
+      timer(itag,ith)%totalsq = timer(itag,ith)%totalsq + delta_t*delta_t
 
       ! If we're recording a time-series then store this result. We use
       ! single precision for this to save space (so as to try to minimise
@@ -485,8 +473,18 @@ CONTAINS
      ! MPI parallel
      real(wp), allocatable, dimension(:,:,:) :: max_times, min_times
      real(wp), allocatable, dimension(:,:) :: raw_times, sum_times
+     !> The maximum number of header lines
+     integer, parameter :: HEADER_LINES = 4
+     !> The number of header lines that have content
+     integer :: nlines
+     !> The array of strings holding the header lines
+     character(len=120) :: timer_str(HEADER_LINES)
+     !> String holding the units of the chosen timer
+     character(len=10) :: units_str
 
-     character(len=120) :: timer_str = ""
+     nlines = 0
+     timer_str(:) = ""
+     units_str = "s"
 
      if( is_parallel() )then
 
@@ -517,23 +515,49 @@ CONTAINS
 
      select case(base_timer)
      case(OMP_TIMER)
-        write(timer_str, &
+        nlines = nlines + 1
+        write(timer_str(nlines), &
              "('Timed using OpenMP omp_get_wtime. Units are seconds.')")
+        nlines = nlines + 1
+        write (timer_str(nlines), &
+             "('TIMING: time between clock ticks =',1E13.5,' (s)')") &
+             clock_tick_s
      case(RDTSC_TIMER)
-        write(timer_str, &
-             "('Timed using Intel Time Stamp Counter. Units are counts.')")
+        units_str = "counts"
+        nlines = nlines + 1
+        write(timer_str(nlines), &
+             "('Timed using Intel Time Stamp Counter (RDTSC). Units are counts.')")
      case(INTRINSIC_TIMER)
-        write(timer_str, &
+        nlines = nlines + 1
+        write(timer_str(nlines), &
              "('Timed using Fortran SYSTEM_CLOCK intrinsic. Units are seconds.')")
+        nlines = nlines + 1
+        write(timer_str(nlines),                          &
+             "('cycles/sec = ',I7,', max count = ',I11)") &
+             iclk_rate, iclk_max
      case(TOFDAY_TIMER)
-        write(timer_str, &
+        nlines = nlines + 1
+        write(timer_str(nlines), &
              "('Timed using gettimeofday(). Units are seconds.')")
      case(POSIX_TIMER)
-        write(timer_str, &
+        nlines = nlines + 1
+        write(timer_str(nlines), &
              "('Timed using POSIX timer. Units are seconds.')")        
+        nlines = nlines + 1
+        write(timer_str(nlines), &
+             "('Reported resolution = ',1E13.5,' (s)')") clock_tick_s
      case default
         return
      end select
+
+     nlines = nlines + 1
+     write (timer_str(nlines), &
+          "('Effective clock granularity = ', 1E12.5,' (',(A),')')")  &
+          timer_granularity(), TRIM(units_str)
+     nlines = nlines + 1
+     write (timer_str(nlines), &
+          "('Measured systematic error in dl_timer API = ', 1E12.5,' +/-',1E10.3,' (',(A),')')") &
+          systematic_err(1), systematic_err(2), TRIM(units_str)
 
      ! Check whether any of our timed regions have a non-unity
      ! no. of repeats.
@@ -547,13 +571,13 @@ CONTAINS
 
      ! Call the appropriate routine to generate the report
      if(is_parallel())then
-        call timer_report_parallel(timer_str, max_times, &
+        call timer_report_parallel(timer_str, nlines, max_times, &
                                    min_times, sum_times)
      else
         if(have_repeats)then
-           call timer_report_with_repeats(timer_str)
+           call timer_report_with_repeats(timer_str, nlines)
         else
-           call timer_report_no_repeats(timer_str)
+           call timer_report_no_repeats(timer_str, nlines)
         end if
      end if
 
@@ -564,21 +588,22 @@ CONTAINS
 
    !==========================================================================
 
-    subroutine timer_report_no_repeats(timer_str)
+    subroutine timer_report_no_repeats(timer_str, nlines)
       use dl_timer_parallel, only: get_rank
       implicit none
-      CHARACTER(len=*), INTENT(in) :: timer_str
-      INTEGER       :: ji, jt
-      REAL(KIND=wp) :: wtime
+      integer,          intent(in) :: nlines
+      character(len=*), intent(in) :: timer_str(nlines)
+      integer       :: ji, jt
+      real(kind=wp) :: wtime
       integer       :: rank
 
       rank = get_rank()
       if(rank == 0)then
 
          WRITE(*,"(/31('='),' Timing report ',31('='))")
-         WRITE(*,"(4x, (A))") TRIM(timer_str)
+         WRITE(*,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
          WRITE(*,"(77('-'))")
-         WRITE(*,"('Region',26x,'Counts',5x,'Total',8x,'Average',5x,'Error')")
+         WRITE(*,"('Region',26x,'Counts',5x,'Total',8x,'Average',5x,'Std Err')")
          WRITE(*,"(77('-'))")
          DO jt = 1, nThreads, 1
 
@@ -599,7 +624,7 @@ CONTAINS
                WRITE(*,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
                             timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
                             wtime, wtime/REAL(timer(ji,jt)%count), &
-                            time_err(timer(ji,jt)%count)
+                            time_err(timer(ji,jt))
             END DO
          END DO
          WRITE(*," (77('='))")
@@ -608,12 +633,13 @@ CONTAINS
 
    !==========================================================================
 
-   subroutine timer_report_with_repeats(timer_str)
+   subroutine timer_report_with_repeats(timer_str, nlines)
      use dl_timer_parallel, only: get_rank
      !> Write the timing report for the case where one or more regions have an
      !! implicit repeat > 1.
      IMPLICIT none
-     CHARACTER(len=*), INTENT(in) :: timer_str
+     integer,          intent(in) :: nlines
+     character(len=*), intent(in) :: timer_str(nlines)
      INTEGER       :: ji, jt
      REAL(KIND=wp) :: wtime, tmean, trepeat
      integer :: rank
@@ -622,9 +648,9 @@ CONTAINS
      if(rank == 0)then
 
         write(*,"(/36('='),' Timing report ',36('='))")
-        write(*,"(4x,(A))") TRIM(timer_str)
+        write(*,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
         write(*,"(88('-'))")
-        write(*,"('Region',26x,'Counts',6x,'Total',7x,' Average    Avg/repeat   Error')")
+        write(*,"('Region',26x,'Counts',6x,'Total',7x,' Average    Avg/repeat   Std Err')")
         write(*,"(88('-'))")
         do jt = 1, nThreads, 1
 
@@ -647,13 +673,14 @@ CONTAINS
               ! timed region
               trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
               ! Truncate the label to 32 chars for table-formatting purposes
-              write(*,"((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")  &
+              write(*,"((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")   &
                    timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
                    wtime, tmean, trepeat,                                 & 
                    ! Error estimate using quadrature formula for
                    ! the time spent in just one of the nrepeat 
-                   ! regions - use product formula
-                   trepeat*time_err(timer(ji,jt)%count)/tmean
+                   ! regions - use product formula (i.e. fractional error
+                   ! for time in region == that in one of the nrepeat regions)
+                   trepeat*time_err(timer(ji,jt))/tmean
            end do
         end do
         write(*,"(88('='))")
@@ -662,16 +689,17 @@ CONTAINS
 
    !==========================================================================
 
-   subroutine timer_report_parallel(timer_str, max_times, &
-                                                 min_times, sum_times)
+   subroutine timer_report_parallel(timer_str, nlines, max_times, &
+                                    min_times, sum_times)
      use dl_timer_parallel, only: get_rank, num_ranks
      !> Write the timing report when we're MPI parallel
      IMPLICIT none
-     CHARACTER(len=*), INTENT(in) :: timer_str
-     real(kind=wp), intent(in) :: max_times(:,:,:), min_times(:,:,:), &
-                                  sum_times(:,:)
-      ! Locals
-     INTEGER       :: ji, jt
+     integer,          intent(in) :: nlines
+     character(len=*), intent(in) :: timer_str(nlines)
+     real(kind=wp),    intent(in) :: max_times(:,:,:), min_times(:,:,:), &
+                                     sum_times(:,:)
+     ! Locals
+     integer       :: ji, jt
      integer       :: rank, nproc
      real(wp)      :: rtot_repeats
      character(len=8)  :: minrank, maxrank
@@ -684,7 +712,7 @@ CONTAINS
      if(rank == 0)then
 
         write(*,"(/34('='),' Timing report ',34('='))")
-        write(*,"(4x,(A))") TRIM(timer_str)
+        write(*,"((A))") (TRIM(timer_str(ji)), ji=1, nlines)
         write(*,"(83('-'))")
         write(*,"(23x,'Counts',21x,'Time per repeat')")
         write(*,"('Region',14x,'Explicit(Implt)',2x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
@@ -774,18 +802,21 @@ CONTAINS
 
    !===================================================================
 
-   FUNCTION time_err(ncount)
+   function time_err(timer)
      implicit none
-     integer :: ncount
      real(wp) :: time_err
-     ! Calculate the error in the mean time duration using the reported
-     ! granularity of the clock and quadrature formula
-     ! Every time we time a region we get a start time and a stop time.
-     ! There is an error of +/-clock_tick_s in each of these so the error
-     ! in the measured duration is sqrt(2*clock_tick_s^2). We then have
-     ! ncount measured durations so the error in the mean duration is:
-     time_err = clock_tick_s*sqrt(2.0d0/REAL(ncount))
-   END FUNCTION time_err
+     type(timer_type), intent(in) :: timer
+     ! Calculate the error in the mean time duration using the
+     ! formula for the standard devation = sqrt(<t^2> - <t>^2)
+
+     time_err = SQRT(timer%totalsq/timer%count - (timer%total/timer%count)**2)
+     ! The error in our estimate of a population mean from N samples 
+     ! is stdev / sqrt(N - 1)
+     if (timer%count > 1) then
+        time_err = time_err / SQRT(REAL(timer%count - 1, wp))
+     end if
+
+   end function time_err
 
 !============================================================================
 
