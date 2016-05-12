@@ -781,10 +781,14 @@ CONTAINS
      integer, intent(in) :: width, nlines
      character(len=*), intent(in) :: timer_str(nlines)
      character(len=3) :: width_str, halfwidth_str
-     integer :: ji
+     integer :: lwidth, ji
 
-     write(width_str, "(I3)") width
-     write(halfwidth_str, "(I3)") (width-15)/2
+     ! Ensure supplied width is not less than 17 chars because the
+     ! central text is 15 chars on its own.
+     lwidth = MAX(width, 17)
+
+     write(width_str, "(I3)") lwidth
+     write(halfwidth_str, "(I3)") (lwidth-15)/2
 
      write(numout,"(/"//TRIM(halfwidth_str)//"('='),' Timing report ',"// &
           & TRIM(halfwidth_str)//"('='))")
