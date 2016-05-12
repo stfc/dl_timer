@@ -282,7 +282,6 @@ CONTAINS
      !> Estimate the systematic error associated with dl_timer
      integer, parameter :: ntimes = 50000
      integer :: i, itime1, itime2
-     real(wp) :: sys_err
 
      ! We time a completely empty region using the full dl_timer 'public'
      ! API...
@@ -311,11 +310,12 @@ CONTAINS
      ! This is then reported in timer_report() at the end of the run.
      systematic_err(1) = timer(itime2,1)%total / &
                          REAL(timer(itime2,1)%count, wp)
+     ! Calculate and store the statistical error in this result
      systematic_err(2) = time_err(timer(itime2,1))
 
      ! Estimate the overhead in calling the dl_timer start+stop API
      overhead = (timer(itime1,1)%total - timer(itime2,1)%total) / &
-                      REAL(timer(itime2,1)%count, wp)
+                REAL(timer(itime2,1)%count, wp)
 
      ! Reset our timers
      call clear_timers()
