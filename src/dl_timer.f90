@@ -26,9 +26,9 @@ MODULE dl_timer
 
    !> Which timer type to use by default
    INTEGER :: base_timer = POSIX_TIMER
-   !> Whether to record time-series data - currently only supported
-   !! for the OMP timer. When dl-timer is built DM parallel, only rank 0
-   !! writes out time-line data.
+
+   !> Whether to record time-series data. When dl-timer is built
+   !! DM parallel, only rank 0 writes out time-line data.
    LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
    !------------------------------------------------------------------
