@@ -3,7 +3,8 @@ INC_DIR = ../src
 
 # Tests not requiring MPI
 TEST_EXES = timer_test.exe timer_test_no_repeat.exe \
-            timer_test_omp.exe timer_test_granularity.exe
+            timer_test_omp.exe timer_test_omp_no_repeats.exe \
+            timer_test_granularity.exe
 
 # Tests requiring MPI
 DM_TEST_EXES = timer_test_mpi.exe
@@ -22,6 +23,9 @@ timer_test_no_repeat.exe: ../dl_timer_lib.a timer_test_no_repeat.o
 timer_test_omp.exe: ../dl_timer_lib.a timer_test_omp.o
 	${LINK} ${OMPFLAGS} timer_test_omp.o ../dl_timer_lib.a -o $@
 
+timer_test_omp_no_repeats.exe: ../dl_timer_lib.a timer_test_omp_no_repeats.o
+	${LINK} ${OMPFLAGS} timer_test_omp_no_repeats.o ../dl_timer_lib.a -o $@
+
 timer_test_mpi.exe: ../dl_timer_lib.a timer_test_mpi.o
 	${MPIF90} ${LDFLAGS} timer_test_mpi.o ../dl_timer_lib.a -o $@
 
@@ -30,6 +34,7 @@ sm_test: ${TEST_EXES}
 	./timer_test.exe
 	./timer_test_no_repeat.exe
 	./timer_test_omp.exe
+	./timer_test_omp_no_repeats.exe
 	./timer_test_granularity.exe
 
 .PHONY: dm_test
@@ -49,8 +54,11 @@ allclean: clean
 timer_test_mpi.o: timer_test_mpi.f90
 	$(MPIF90) $(F90FLAGS) -I$(INC_DIR) -c $<
 
-# This test case must be compiled with OpenMP enabled
+# These test cases must be compiled with OpenMP enabled
 timer_test_omp.o: timer_test_omp.f90
+	$(F90) $(F90FLAGS) $(OMPFLAGS) -I$(INC_DIR) -c $<
+
+timer_test_omp_no_repeats.o: timer_test_omp_no_repeats.f90
 	$(F90) $(F90FLAGS) $(OMPFLAGS) -I$(INC_DIR) -c $<
 
 %.o: %.f90
