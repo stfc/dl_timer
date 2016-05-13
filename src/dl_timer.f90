@@ -42,7 +42,8 @@ MODULE dl_timer
    REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
 
    !> Unit for stdout
-   INTEGER, PARAMETER :: numout = 6
+   INTEGER, PARAMETER :: OUT_UNIT = 6
+   INTEGER, PARAMETER :: ERR_UNIT = 6
 
    !-------------------------------------------------------------------
    ! Parameters and types for the timing routines
@@ -122,7 +123,7 @@ MODULE dl_timer
   !-------------------------------------------------------------------
   ! Publicly-accessible routines
 
-  PUBLIC timer_init, time_in_s, timer_start, timer_stop, timer_report
+  PUBLIC timer_init, timer_register, timer_start, timer_stop, timer_report
 
 CONTAINS
 
@@ -170,7 +171,7 @@ CONTAINS
       ! region.
 !$    IF(omp_get_num_threads() > 1)THEN
 !$OMP MASTER
-!$      WRITE(numout, &
+!$      WRITE(OUT_UNIT, &
 !$            "('init_time: ERROR: cannot be called from within OpenMP PARALLEL region.')")
 !$OMP END MASTER
 !$OMP BARRIER
@@ -190,7 +191,7 @@ CONTAINS
          ! Check that the RDTSC timer is available (must have been compiled
          ! with the Intel compiler). If it isn't then we abort.
          if(rdtsc_available() /= 1)then
-            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+            write (OUT_UNIT,"('TIMING: ERROR: dl_timer configured to use ' &
                           & 'RDTSC but not built with Intel compiler.')")
             stop
          end if
@@ -205,7 +206,7 @@ CONTAINS
 
       case(POSIX_TIMER)
          if( posix_clock_init(clock_tick_s) /= 1)then
-            write (numout,"('TIMING: ERROR: dl_timer configured to use ' &
+            write (OUT_UNIT,"('TIMING: ERROR: dl_timer configured to use ' &
                           & 'POSIX timer but system does not support it.')")
             stop
          end if
@@ -218,7 +219,7 @@ CONTAINS
                Stat=ierr)
 
       IF(ierr /= 0)THEN
-         WRITE (numout,*) 'init_time: ERROR: failed to allocate timer structures'
+         WRITE (OUT_UNIT,*) 'init_time: ERROR: failed to allocate timer structures'
          stop
       END IF
 
@@ -229,7 +230,7 @@ CONTAINS
                allocate(timer(ji,ith)%time_series(TIME_SERIES_LEN), &
                         Stat=ierr)
                if(ierr /= 0)then
-                  write (numout, &
+                  write (OUT_UNIT, &
                        "('init_time: ERROR: failed to allocate time-series array')")
                   return
                end if
@@ -285,9 +286,9 @@ CONTAINS
 
      ! We time a completely empty region using the full dl_timer 'public'
      ! API...
-     call timer_start('Timed region', itime1)
+     call timer_start(itime1, label='Timed region')
      do i=1, ntimes
-        call timer_start('Empty region', itime2)
+        call timer_start(itime2, label='Empty region')
         call timer_stop(itime2)
      end do
      call timer_stop(itime1)
@@ -369,66 +370,105 @@ CONTAINS
 
 !============================================================================
 
-   SUBROUTINE timer_start(label, idx, nrepeat)
+   subroutine timer_register(label, idx, num_repeats)
+     implicit none
+     !> Register a timer with the supplied string as its name.
+     !! Return an integer handle.
+     !> The name of the timed region
+     character (*), intent(in) :: label
+     !> The handle for this region
+     integer, intent(out) :: idx
+     !> The number of repeated intervals inside this timed region.
+     !! Used to report a time per interval in the output generated
+     !! by timer_report().
+     integer, intent(in), optional :: num_repeats
+     ! Locals
+     !> Index of current thread (1 if not using OpenMP)
+     integer :: ith
+     integer :: ji
+
+     if(len_trim(label) > LABEL_LEN)then
+        write(ERR_UNIT, &
+             "('timer_register: ERROR: length of label >>',(A),'<< exceeds ',I2,' chars')") &
+             trim(label), LABEL_LEN
+        idx = -1
+        return
+     end if
+      
+     ith = 1
+!$   ith = 1 + omp_get_thread_num()
+
+     ! Check that there is no existing timer with this name already
+     do ji=1,itimerCount(ith),1
+        ! Shorter string is padded with blanks so that lengths match
+        if(timer(ji,ith)%label == label)then
+           idx = ji
+           return
+        end if
+     end do
+
+     ! Create a new timer
+     itimerCount(ith) = itimerCount(ith) + 1
+     IF(itimerCount(ith) > MAX_TIMERS)THEN
+        write(ERR_UNIT, &
+             "('timer_register: ERROR: max. no. of timers exceeded!')")
+        write(ERR_UNIT, &
+             "('timer_register: ERROR: thread = ',I3,'label = ',(A))") &
+             ith, label
+        idx = -1
+        itimerCount(ith) = itimerCount(ith) - 1
+        return
+     END IF
+
+     idx = itimerCount(ith)
+     
+     ! Initialise this new timer structure
+     timer(idx, ith)%label = TRIM(ADJUSTL(label))
+     if(present(num_repeats))then
+        timer(idx, ith)%nrepeat = num_repeats
+     else
+        ! No repeat specified so default to a value of unity.
+        timer(idx, ith)%nrepeat = 1
+     end if
+
+   end subroutine timer_register
+   
+!============================================================================
+
+   SUBROUTINE timer_start(handle, label, num_repeats)
       USE intel_timer_mod
       IMPLICIT none
-      CHARACTER (*), INTENT(in) :: label
-      INTEGER, INTENT(out) :: idx
+      !> The handle of this timer. Greater than 0 if starting an
+      !! existing timer. If creating a new timer then on return contains the
+      !! handle for it.
+      INTEGER, INTENT(inout) :: handle
+      !> The name of this timer (if creating a new one), otherwise none.
+      CHARACTER (*), INTENT(in), optional :: label
       !> The number of repeated intervals inside this timed region.
       !! Used to report a time per interval in the report generated
       !! by timer_report().
-      INTEGER, INTENT(in), OPTIONAL :: nrepeat
-      INTEGER :: ji, ith
-
-      IF(LEN_TRIM(label) > LABEL_LEN)THEN
-         WRITE(*,"('timer_start: ERROR: length of label >>',(A),'<< exceeds ',I2,' chars')") &
-              TRIM(label), LABEL_LEN
-         idx = -1
-         RETURN
-      END IF
+      INTEGER, INTENT(in), OPTIONAL :: num_repeats
+      INTEGER :: ith
 
       ith = 1
 !$    ith = 1 + omp_get_thread_num()
 
-      ! Search for existing timer
-      DO ji=1,itimerCount(ith),1
-         ! Shorter string is padded with blanks so that lengths match
-         IF(timer(ji,ith)%label == label)EXIT 
-      END DO
-
-      IF( ji > itimerCount(ith) )THEN
-         ! Create a new timer
-         itimerCount(ith) = itimerCount(ith) + 1
-         IF(itimerCount(ith) > MAX_TIMERS)THEN
-            WRITE(*,"('timer_start: ERROR: max. no. of timers exceeded!')")
-            WRITE(*,"('timer_start: ERROR: thread = ',I3,'label = ',(A))") &
-                  ith, label
-            idx = -1
-            itimerCount(ith) = itimerCount(ith) - 1
-            RETURN
-         END IF
-
-         ji = itimerCount(ith)
-
-         ! Initialise this new timer structure
-         timer(ji, ith)%label = TRIM(ADJUSTL(label))
-         if(present(nrepeat))then
-            timer(ji, ith)%nrepeat = nrepeat
-         else
-            ! No repeat specified so default to a value of unity.
-            timer(ji, ith)%nrepeat = 1
+      if(.not. present(label))then
+         ! Using an existing timer - check that supplied handle is valid
+         if(handle < 1 .or. handle > itimerCount(ith))then
+            write(ERR_UNIT, "('timer_start: ERROR: invalid handle value')")
+            return
          end if
-
-      END IF
+      else
+         call timer_register(label, handle, num_repeats)
+         if(handle < 1)return
+      end if
 
       ! Increment the count of no. of times we've used this timer
-      timer(ji,ith)%count = timer(ji,ith)%count + 1
-
-      ! Return integer tag
-      idx = ji
+      timer(handle,ith)%count = timer(handle,ith)%count + 1
 
       ! And finally record the current timer value
-      timer(ji,ith)%istart = time_now()
+      timer(handle,ith)%istart = time_now()
 
    END SUBROUTINE timer_start
 
@@ -615,15 +655,15 @@ CONTAINS
       if(rank == 0)then
 
          call write_report_header(77, timer_str, nlines)
-         write(numout, &
+         write(OUT_UNIT, &
               "('Region',26x,'Counts',5x,'Total',7x,'Average*',5x,'Std Err')")
-         write(numout,"(77('-'))")
+         write(OUT_UNIT,"(77('-'))")
 
          do jt = 1, nThreads, 1
 
             if(itimerCount(jt) > 0 .AND. nThreads > 1)then
-               if(jt > 1) write(numout, "(34('- '))")
-               write(numout, " ('Thread ',I3)") jt-1
+               if(jt > 1) write(OUT_UNIT, "(34('- '))")
+               write(OUT_UNIT, " ('Thread ',I3)") jt-1
             end if
 
             do ji=1, itimerCount(jt), 1
@@ -635,7 +675,7 @@ CONTAINS
                end if
 
                ! Truncate the label to 32 chars for table-formatting purposes
-               write(numout,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
+               write(OUT_UNIT,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
                             timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
                             wtime, &
                             MAX(wtime/REAL(timer(ji,jt)%count)-systematic_err(1), 0.0d0), &
@@ -664,14 +704,14 @@ CONTAINS
      if(rank == 0)then
 
         call write_report_header(88, timer_str, nlines)
-        write(numout,"('Region',26x,'Counts',6x,'Total',7x,'Average*   Avg/repeat*  Std Err')")
-        write(numout,"(88('-'))")
+        write(OUT_UNIT,"('Region',26x,'Counts',6x,'Total',7x,'Average*   Avg/repeat*  Std Err')")
+        write(OUT_UNIT,"(88('-'))")
 
         do jt = 1, nThreads, 1
 
            if(itimerCount(jt) > 0 .AND. nThreads > 1)then
-              if(jt > 1) WRITE(numout, "(36('- '))")
-              WRITE(numout, " ('Thread ',I3)") jt-1
+              if(jt > 1) WRITE(OUT_UNIT, "(36('- '))")
+              WRITE(OUT_UNIT, " ('Thread ',I3)") jt-1
            end if
 
            do ji=1,itimerCount(jt),1
@@ -689,7 +729,7 @@ CONTAINS
               ! timed region
               trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
               ! Truncate the label to 32 chars for table-formatting purposes
-              write(numout, "((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")   &
+              write(OUT_UNIT, "((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")   &
                    timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
                    wtime, tmean, trepeat,                                 & 
                    ! Error estimate using quadrature formula for
@@ -729,14 +769,14 @@ CONTAINS
      if(rank == 0)then
 
         call write_report_header(83, timer_str, nlines)
-        write(numout,"(23x,'Counts',21x,'Time per repeat*')")
-        write(numout,"('Region',14x,'Explicit(Implt)',2x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
-        write(numout,"(83('-'))")
+        write(OUT_UNIT,"(23x,'Counts',21x,'Time per repeat*')")
+        write(OUT_UNIT,"('Region',14x,'Explicit(Implt)',2x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
+        write(OUT_UNIT,"(83('-'))")
         do jt = 1, nThreads, 1
 
            if(itimerCount(jt) > 0 .AND. nThreads > 1)then
-              if(jt > 1) WRITE(numout, "(39('- '))")
-              WRITE(numout, " ('Thread ',I3)") jt-1
+              if(jt > 1) WRITE(OUT_UNIT, "(39('- '))")
+              WRITE(OUT_UNIT, " ('Thread ',I3)") jt-1
            end if
 
            do ji=1,itimerCount(jt),1
@@ -758,7 +798,7 @@ CONTAINS
               rnrepeat = 1.0d0/REAL(timer(ji,jt)%nrepeat, kind=wp)
 
               ! Truncate the label to 20 chars for table-formatting purposes
-              write(numout, "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
+              write(OUT_UNIT, "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
                    timer(ji,jt)%label(1:20), TRIM(repeat_str),            &
                    MAX((min_times(1,ji,jt)*rcount-systematic_err(1))*rnrepeat,&
                        0.0d0), &
@@ -790,10 +830,10 @@ CONTAINS
      write(width_str, "(I3)") lwidth
      write(halfwidth_str, "(I3)") (lwidth-15)/2
 
-     write(numout,"(/"//TRIM(halfwidth_str)//"('='),' Timing report ',"// &
+     write(OUT_UNIT,"(/"//TRIM(halfwidth_str)//"('='),' Timing report ',"// &
           & TRIM(halfwidth_str)//"('='))")
-     write(numout,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
-     write(numout,"("//TRIM(width_str)//"('-'))")
+     write(OUT_UNIT,"((A))") (TRIM(timer_str(ji)), ji=1,nlines)
+     write(OUT_UNIT,"("//TRIM(width_str)//"('-'))")
 
    end subroutine write_report_header
 
@@ -806,9 +846,9 @@ CONTAINS
      character(len=3) :: width_str
      write(width_str, "(I3)") width
 
-     write(numout, "("//TRIM(width_str)//"('-'))")
-     write(numout,"('* corrected for systematic error')")
-     write(numout, "("//TRIM(width_str)//"('=')/)")
+     write(OUT_UNIT, "("//TRIM(width_str)//"('-'))")
+     write(OUT_UNIT, "('* corrected for systematic error')")
+     write(OUT_UNIT, "("//TRIM(width_str)//"('=')/)")
 
    end subroutine write_report_footer
 
