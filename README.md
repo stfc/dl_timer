@@ -8,10 +8,12 @@ mixed-mode/hybrid parallelism is not yet supported.
 By default the library is configured to use the POSIX monotonic clock
 (as that has consistently good resolution). The following timers/clocks
 are also supported:
- * the intrinsic Fortran timer (precision may be limited);
- * the Intel RDTSC processor counter (requires Intel compiler);
- * the C gettimeofday() routine (microsecond precision);
- * the OpenMP omp_get_wtime() routine.
+
+* the intrinsic Fortran timer (precision may be limited);
+* the Intel RDTSC processor counter (requires Intel compiler);
+* the C gettimeofday() routine (microsecond precision);
+* the OpenMP omp_get_wtime() routine.
+
 The timer to use may be changed at compile time by editing src/dl_timer.f90
 and setting 'base_timer' to the appropriate value.
 
