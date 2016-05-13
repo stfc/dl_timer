@@ -88,7 +88,7 @@ MODULE dl_timer
    END TYPE timer_type
 
    INTEGER, SAVE :: nThreads ! No. of OMP threads being used (1 if no OMP)
-                             ! Set in init_time().
+                             ! Set in timer_init().
 
    TYPE(timer_type), ALLOCATABLE, SAVE, DIMENSION(:,:) :: timer
 
@@ -167,12 +167,12 @@ CONTAINS
       dm_parallel = is_parallel()
       myrank = get_rank()
 
-      ! Check that init_time hasn't been called from within an OMP PARALLEL
+      ! Check that timer_init hasn't been called from within an OMP PARALLEL
       ! region.
 !$    IF(omp_get_num_threads() > 1)THEN
 !$OMP MASTER
 !$      WRITE(OUT_UNIT, &
-!$            "('init_time: ERROR: cannot be called from within OpenMP PARALLEL region.')")
+!$            "('timer_init: ERROR: cannot be called from within OpenMP PARALLEL region.')")
 !$OMP END MASTER
 !$OMP BARRIER
 !$      STOP
@@ -219,7 +219,7 @@ CONTAINS
                Stat=ierr)
 
       IF(ierr /= 0)THEN
-         WRITE (OUT_UNIT,*) 'init_time: ERROR: failed to allocate timer structures'
+         WRITE (OUT_UNIT,*) 'timer_init: ERROR: failed to allocate timer structures'
          stop
       END IF
 
@@ -231,7 +231,7 @@ CONTAINS
                         Stat=ierr)
                if(ierr /= 0)then
                   write (OUT_UNIT, &
-                       "('init_time: ERROR: failed to allocate time-series array')")
+                       "('timer_init: ERROR: failed to allocate time-series array')")
                   return
                end if
             END DO
@@ -369,7 +369,7 @@ CONTAINS
 
 !============================================================================
 
-   subroutine timer_register(label, idx, num_repeats)
+   subroutine timer_register(idx, label, num_repeats)
      implicit none
      !> Register a timer with the supplied string as its name.
      !! Return an integer handle.
@@ -459,7 +459,8 @@ CONTAINS
             return
          end if
       else
-         call timer_register(label, handle, num_repeats)
+         ! This is (potentially) a new timer so register it.
+         call timer_register(handle, label, num_repeats)
          if(handle < 1)return
       end if
 
