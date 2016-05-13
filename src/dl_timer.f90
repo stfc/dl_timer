@@ -25,7 +25,7 @@ MODULE dl_timer
    ! Section that configures which timer is used
 
    !> Which timer type to use by default
-   INTEGER :: base_timer = POSIX_TIMER
+   INTEGER, PARAMETER :: base_timer = POSIX_TIMER
 
    !> Whether to record time-series data. When dl-timer is built
    !! DM parallel, only rank 0 writes out time-line data.
