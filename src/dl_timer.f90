@@ -54,7 +54,10 @@ MODULE dl_timer
    REAL(wp) :: systematic_err(2) !< Measured systematic error (in the
                                  !! units of the chosen clock) and 
                                  !! associated std err
-   REAL(wp) :: overhead !< Overhead of calling dl_timer start/stop API
+   REAL(wp) :: noreg_overhead !< Overhead of calling dl_timer start/stop API
+                              !! without pre-registering timer
+   REAL(wp) :: prereg_overhead !< Overhead of calling dl_timer start/stop
+                               !! API when timer is pre-registered
 
    !> Maximum length of the label for a timed region
    INTEGER, PARAMETER :: LABEL_LEN  = 128
@@ -279,9 +282,9 @@ CONTAINS
 
    subroutine estimate_systematic_error()
      implicit none
-     !> Estimate the systematic error associated with dl_timer
+     !> Estimate the systematic error and overheads associated with dl_timer
      integer, parameter :: ntimes = 50000
-     integer :: i, itime1, itime2
+     integer :: i, itime1, itime2, itime3, itime4
 
      ! We time a completely empty region using the full dl_timer 'public'
      ! API...
@@ -292,19 +295,14 @@ CONTAINS
      end do
      call timer_stop(itime1)
 
-     ! The indices of the timed regions should be just the values of itime1
-     ! and itime2 but the API makes no guarantees about this so we search
-     ! for them just in case they aren't...
-     itime1 = -1 ; itime2 = -1
-     do i=1, MAX_TIMERS
-        if (TRIM(timer(i,1)%label) == 'Empty region') itime2 = i
-        if (TRIM(timer(i,1)%label) == 'Timed region') itime1 = i
+     ! Repeat but register the innermost timer first to reduce overhead
+     call timer_register(itime4, label="Empty region 2")
+     call timer_start(itime3, label='Timed region 2')
+     do i=1, ntimes
+        call timer_start(itime4)
+        call timer_stop(itime4)
      end do
-
-     if (itime1 > MAX_TIMERS .OR. itime2 > MAX_TIMERS) then
-        write (*,*) 'TIMER: ERROR - estimation of systematic error failed!'
-        return
-     end if
+     call timer_stop(itime3)
 
      ! Calculate and store the average time spent 'doing nothing'.
      ! This is then reported in timer_report() at the end of the run.
@@ -313,9 +311,15 @@ CONTAINS
      ! Calculate and store the statistical error in this result
      systematic_err(2) = time_err(timer(itime2,1))
 
-     ! Estimate the overhead in calling the dl_timer start+stop API
-     overhead = (timer(itime1,1)%total - timer(itime2,1)%total) / &
+     ! Estimate the overhead in calling the dl_timer start+stop API when
+     ! the timer is not pre-registered
+     noreg_overhead = (timer(itime1,1)%total - timer(itime2,1)%total) / &
                 REAL(timer(itime2,1)%count, wp)
+
+     ! Estimate the overhead in calling the dl_timer start+stop API when
+     ! the timer has been previously registered
+     prereg_overhead = (timer(itime3,1)%total - timer(itime4,1)%total) / &
+                REAL(timer(itime4,1)%count, wp)
 
      ! Reset our timers
      call clear_timers()
@@ -524,7 +528,7 @@ CONTAINS
      real(wp), allocatable, dimension(:,:,:) :: max_times, min_times
      real(wp), allocatable, dimension(:,:) :: raw_times, sum_times
      !> The maximum number of header lines
-     integer, parameter :: HEADER_LINES = 5
+     integer, parameter :: HEADER_LINES = 6
      !> The number of header lines that have content
      integer :: nlines
      !> The array of strings holding the header lines
@@ -610,8 +614,12 @@ CONTAINS
           systematic_err(1), systematic_err(2), TRIM(units_str)
      nlines = nlines + 1
      write (timer_str(nlines), &
-        "('Measured overhead in calling start/stop = ',1E11.5,' (',(A),')')") &
-        overhead, TRIM(units_str)
+        "('Measured overhead in calling start/stop = ',1E10.4,' (',(A),')')") &
+        noreg_overhead, TRIM(units_str)
+     nlines = nlines + 1
+     write (timer_str(nlines), &
+        "('Measured overhead in calling start/stop for registered timer = ',1E10.4,' (',(A),')')") &
+        prereg_overhead, TRIM(units_str)
 
      ! Check whether any of our timed regions have a non-unity
      ! no. of repeats.
