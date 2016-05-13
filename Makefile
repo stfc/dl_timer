@@ -36,10 +36,13 @@ sm_test: sm_lib
 dm_test: dm_lib
 	${MAKE} --directory=test dm_test
 
-.PHONY: clean
-clean:
-	${MAKE} --directory=${SRC_DIR} clean
+.PHONY: testclean
+testclean:
 	${MAKE} --directory=${TEST_DIR} clean
+
+.PHONY: clean
+clean: testclean
+	${MAKE} --directory=${SRC_DIR} clean
 
 .PHONY: allclean
 allclean:
