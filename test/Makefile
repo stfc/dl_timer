@@ -20,10 +20,10 @@ timer_test_no_repeat.exe: ../dl_timer_lib.a timer_test_no_repeat.o
 	${LINK} timer_test_no_repeat.o ../dl_timer_lib.a -o $@
 
 timer_test_omp.exe: ../dl_timer_lib.a timer_test_omp.o
-	${LINK} timer_test_omp.o ../dl_timer_lib.a -o $@
+	${LINK} ${OMPFLAGS} timer_test_omp.o ../dl_timer_lib.a -o $@
 
 timer_test_mpi.exe: ../dl_timer_lib.a timer_test_mpi.o
-	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_test_mpi.o ../dl_timer_lib.a -o $@
+	${MPIF90} ${LDFLAGS} timer_test_mpi.o ../dl_timer_lib.a -o $@
 
 .PHONY: sm_test
 sm_test: ${TEST_EXES}
