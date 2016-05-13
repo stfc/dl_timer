@@ -29,13 +29,11 @@ dm_lib: ${SRC_DIR}/*.?90
 test: sm_test
 
 .PHONY: sm_test
-sm_test:
-	${MAKE} ${DLT_LIB}
+sm_test: sm_lib
 	${MAKE} --directory=test sm_test
 
 .PHONY: dm_test
-dm_test:
-	${MAKE} ${DLT_LIB}
+dm_test: dm_lib
 	${MAKE} --directory=test dm_test
 
 .PHONY: clean
