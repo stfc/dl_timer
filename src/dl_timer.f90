@@ -256,7 +256,6 @@ CONTAINS
      !! it repeatedly and looking at the minimum amount of time
      !! between the times it returns
      integer,  parameter :: ntimes = 10000
-     real(wp), parameter :: tol_zero = 1.0E-10
      real(wp) :: times(ntimes)
      real(wp) :: diff, min_diff
      integer  :: i, j
@@ -268,10 +267,10 @@ CONTAINS
         j = i+1
         do while(j<ntimes)
            diff = times(j) - times(i)
-           if(diff > tol_zero)exit
+           if(diff > TOL_ZERO)exit
            j = j + 1
         end do
-        if(diff > tol_zero .and. diff < min_diff) min_diff = diff
+        if(diff > TOL_ZERO .and. diff < min_diff) min_diff = diff
      end do
      timer_granularity = min_diff
    end function timer_granularity
@@ -675,17 +674,18 @@ CONTAINS
                end if
 
                ! Truncate the label to 32 chars for table-formatting purposes
-               write(OUT_UNIT,"((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)") &
-                            timer(ji,jt)%label(1:32), timer(ji,jt)%count, &
-                            wtime, &
-                            MAX(wtime/REAL(timer(ji,jt)%count)-systematic_err(1), 0.0d0), &
-                            time_err(timer(ji,jt))
+               write(OUT_UNIT, "((A),1x,I5,1x,E12.5,2x,E12.5,1x,E9.2)")      &
+                       timer(ji,jt)%label(1:32), timer(ji,jt)%count, wtime,  &
+                       MAX(wtime/REAL(timer(ji,jt)%count)-systematic_err(1), &
+                           0.0d0),                                           &
+                       time_err(timer(ji,jt))
             end do
          end do
 
         call write_report_footer(77)
       end if
-   END SUBROUTINE timer_report_no_repeats
+
+   end subroutine timer_report_no_repeats
 
    !==========================================================================
 
@@ -697,7 +697,7 @@ CONTAINS
      integer,          intent(in) :: nlines
      character(len=*), intent(in) :: timer_str(nlines)
      INTEGER       :: ji, jt
-     REAL(KIND=wp) :: wtime, tmean, trepeat
+     REAL(KIND=wp) :: wtime, tmean, trepeat, terr
      integer :: rank
 
      rank = get_rank()
@@ -728,15 +728,22 @@ CONTAINS
               ! Mean time spent in the repeated section of code in the
               ! timed region
               trepeat = tmean/REAL(timer(ji,jt)%nrepeat)
+
+              ! Error estimate using quadrature formula for
+              ! the time spent in just one of the nrepeat 
+              ! regions - use product formula (i.e. fractional error
+              ! for time in region == that in one of the nrepeat regions)
+              if(tmean > TOL_ZERO)then
+                 terr = trepeat*time_err(timer(ji,jt))/tmean
+              else
+                 terr = 0.0d0
+              end if
+
               ! Truncate the label to 32 chars for table-formatting purposes
-              write(OUT_UNIT, "((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")   &
-                   timer(ji,jt)%label(1:32), timer(ji,jt)%count,          &
-                   wtime, tmean, trepeat,                                 & 
-                   ! Error estimate using quadrature formula for
-                   ! the time spent in just one of the nrepeat 
-                   ! regions - use product formula (i.e. fractional error
-                   ! for time in region == that in one of the nrepeat regions)
-                   trepeat*time_err(timer(ji,jt))/tmean
+              write(OUT_UNIT,                                         &
+                   "((A),1x,I6,1x,E12.5,1x,E12.5,1x,E12.5,1x,E9.2)")  &
+                   timer(ji,jt)%label(1:32), timer(ji,jt)%count,      &
+                   wtime, tmean, trepeat, terr
            end do
         end do
 
