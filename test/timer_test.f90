@@ -18,7 +18,7 @@ PROGRAM timer_test
   !--------------------------------------------------------------
   ! Time-stepping
 
-  call timer_start('Time-stepping', time0, nstep)
+  call timer_start(time0, label='Time-stepping', num_repeats=nstep)
 
   do istep = 1, nstep
      mysum = mysum + sqrt(5.0d0*istep*istep)

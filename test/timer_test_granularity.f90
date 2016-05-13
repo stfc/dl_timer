@@ -18,7 +18,7 @@ PROGRAM timer_test_granularity
   ! Time-stepping
 
   do istep = 1, nstep
-     call timer_start('Empty time-step', time0)
+     call timer_start(time0, label='Empty time-step')
      ! Absolutely no work here!
      call timer_stop(time0)
   end do

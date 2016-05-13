@@ -21,12 +21,12 @@ PROGRAM timer_test
   !--------------------------------------------------------------
   ! Time-stepping
 
-  call timer_start('Time-stepping', time0, nstep)
+  call timer_start(time0, label='Time-stepping', num_repeats=nstep)
 
   !$omp parallel default(none) private(istep, mysum, j, time1) shared(nloops)
   do istep = 1, nstep
 
-     call timer_start('Fake section', time1)
+     call timer_start(time1, label='Fake section')
      !$omp do
      do j = 1, nloops
         mysum = mysum + sqrt(5.0d0*istep*istep)
