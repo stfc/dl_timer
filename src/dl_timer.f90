@@ -35,6 +35,8 @@ MODULE dl_timer
    ! Type definitions
    !> double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
+   !> 64-bit integer
+   INTEGER, PARAMETER :: idef64 = selected_int_kind(12)
    !> Single precision
    INTEGER, PARAMETER :: sp = KIND(1.0)
 
@@ -79,14 +81,14 @@ MODULE dl_timer
       !! (accumulated over all visits).
       REAL       (KIND=wp)  :: totalsq
       !> The no. of times this timed region has been executed.
-      INTEGER               :: count
+      INTEGER (KIND=idef64) :: count
       !> The no. of repeated intervals within this timed region.
       !! Used in timer_report() to produce a mean time per repeat.
       !! Default value is 1. User can specify value in call to
       !! timer_start().
-      INTEGER               :: nrepeat
-      !> Array to hold the individual time periods that we collect
-      !! if producing a time-line
+      INTEGER (KIND=idef64) :: nrepeat
+      !> Single-precision array to hold the individual time periods that we
+      !! collect if producing a time-line
       REAL(KIND=sp), ALLOCATABLE :: time_series(:)
    END TYPE timer_type
 
@@ -384,7 +386,7 @@ CONTAINS
      !> The number of repeated intervals inside this timed region.
      !! Used to report a time per interval in the output generated
      !! by timer_report().
-     integer, intent(in), optional :: num_repeats
+     integer(idef64), intent(in), optional :: num_repeats
      ! Locals
      !> Index of current thread (1 if not using OpenMP)
      integer :: ith
@@ -450,7 +452,7 @@ CONTAINS
       !> The number of repeated intervals inside this timed region.
       !! Used to report a time per interval in the report generated
       !! by timer_report().
-      INTEGER, INTENT(in), OPTIONAL :: num_repeats
+      INTEGER(idef64), INTENT(in), OPTIONAL :: num_repeats
       INTEGER :: ith
 
       ith = 1
