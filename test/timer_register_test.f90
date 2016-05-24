@@ -4,7 +4,7 @@ PROGRAM timer_test
 
   integer, parameter :: r_def = KIND(1.0d0)
 
-  integer :: time0
+  integer :: timer0, timer1
   integer :: istep
   integer, parameter :: nstep = 1000
 
@@ -13,18 +13,24 @@ PROGRAM timer_test
   ! Initialisation
 
   call timer_init()
+
+  ! Example of registering a timer for future use
+  call timer_register(timer1, label='Single step')
+
   mysum = 0.0d0
 
   !--------------------------------------------------------------
   ! Time-stepping
 
-  call timer_start(time0, label='Time-stepping', num_repeats=nstep)
+  call timer_start(timer0, label='Time-stepping', num_repeats=nstep)
 
   do istep = 1, nstep
+     call timer_start(timer1)
      mysum = mysum + sqrt(5.0d0*istep*istep)
+     call timer_stop(timer1)
   end do
 
-  call timer_stop(time0)
+  call timer_stop(timer0)
 
   !---------------------------------------------------------------
   ! Finalise
