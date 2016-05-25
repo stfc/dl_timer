@@ -35,6 +35,8 @@ MODULE dl_timer
    ! Type definitions
    !> double precision (real 8)
    INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
+   !> 32-bit integer
+   INTEGER, PARAMETER :: idef32 = selected_int_kind(9)
    !> 64-bit integer
    INTEGER, PARAMETER :: idef64 = selected_int_kind(12)
    !> Single precision
@@ -411,6 +413,14 @@ CONTAINS
            return
         end if
      end do
+
+     if(PRESENT(num_repeats) .AND. num_repeats < 1)then
+        write(ERR_UNIT, &
+             "('timer_register: ERROR: num_repeats must be > 1 but got ',I)") &
+             num_repeats
+        idx = -1
+        return
+     end if
 
      ! Create a new timer
      itimerCount(ith) = itimerCount(ith) + 1
