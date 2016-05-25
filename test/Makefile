@@ -2,7 +2,8 @@
 INC_DIR = ../src
 
 # Tests not requiring MPI
-TEST_EXES = timer_test.exe timer_test_no_repeat.exe \
+TEST_EXES = timer_test.exe timer_invalid_rpts_test.exe \
+            timer_test_no_repeat.exe \
             timer_test_granularity.exe timer_register_test.exe \
 	    timer_test_omp.exe timer_test_omp_no_repeats.exe
 
@@ -23,6 +24,7 @@ timer_register_test_mpi.exe: ../dl_timer_lib.a timer_register_test_mpi.o
 .PHONY: sm_test
 sm_test:  ../dl_timer_lib.a ${TEST_EXES}
 	./timer_test.exe
+	./timer_invalid_rpts_test.exe
 	./timer_register_test.exe
 	./timer_test_no_repeat.exe
 	./timer_test_omp.exe

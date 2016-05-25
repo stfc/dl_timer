@@ -416,7 +416,7 @@ CONTAINS
 
      if(PRESENT(num_repeats) .AND. num_repeats < 1)then
         write(ERR_UNIT, &
-             "('timer_register: ERROR: num_repeats must be > 1 but got ',I)") &
+             "('timer_register: ERROR: num_repeats must be > 1 but got ',I4)") &
              num_repeats
         idx = -1
         return
