@@ -33,6 +33,8 @@ environment variables:
 * MPIF90   - the wrapper with which to invoke the Fortran compiler
              when building (and linking) with MPI. N.B. this is only
              required if MPI support is desired - i.e. the dm_lib target.
+* CC       - the command with which to invoke the C compiler
+* CFLAGS   - flags to pass to the C compiler
 
 e.g. to build with Gnu Fortran I use:
 
