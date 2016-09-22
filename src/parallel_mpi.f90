@@ -46,19 +46,26 @@ contains
 
   subroutine calc_dm_timer_stats(nThreads, ntimers, region_names, &
                                  visit_counts, times,             &
-                                 max_times, min_times, sum_times)
+                                 max_times, min_times, sum_times, sum_counts)
     integer,                                  intent(in) :: nThreads, ntimers
-    !> The name of each timer on this process
-    character(len=LABEL_LEN), dimension(ntimers,nThreads) :: region_names
+    !> The name of each timer on this process. On return holds a list of
+    !! all active timers from any rank.
+    character(len=LABEL_LEN), dimension(ntimers,nThreads), intent(inout) :: region_names
     !> The total time spent in each region by each thread on this process
-    real(wp), dimension(ntimers,nThreads),    intent(in) :: times
+    real(r_def), dimension(ntimers,nThreads),    intent(in) :: times
     !> The number of times each thread on this process has visited each
     !! timed region. (Can be zero.)
-    integer,  dimension(ntimers, nThreads),   intent(in) :: visit_counts
-    real(wp), dimension(2,ntimers,nThreads), intent(out) :: max_times, min_times
-    real(wp), dimension(ntimers,nThreads),   intent(out) :: sum_times
+    integer(i_def64), dimension(ntimers, nThreads), intent(in) :: visit_counts
+    !> Max/Min time spent in region together with rank of corresponding PE
+    !! Time is in (1,x,y), rank is in (2,x,y).
+    real(r_def), dimension(2,ntimers,nThreads), intent(out) :: max_times, &
+                                                               min_times
+    !> The time spent in each region, summed over all PEs
+    real(r_def), dimension(ntimers,nThreads),   intent(out) :: sum_times
+    !> The no. of times each region is visited, summed over all PEs
+    integer(i_def64), dimension(ntimers, nThreads), intent(out) :: sum_counts
     ! Locals
-    real(wp), allocatable, dimension(:,:,:) :: times_ranks
+    real(r_def), allocatable, dimension(:,:,:) :: times_ranks
     ! The names of all timers on all ranks packed into a 1D array. We can do
     ! this because we know that each label is LABEL_LEN chars long
     character(len=1), allocatable, dimension(:) :: labels_ranks
@@ -68,7 +75,7 @@ contains
     !> Array to store gather of the counts from all timers on all ranks
     integer, allocatable :: all_counts(:)
     !> Array to store gather of the times from all timers on all ranks
-    real(wp), allocatable :: all_times(:)
+    real(r_def), allocatable :: all_times(:)
     !> The number of uniquely-named timed-regions across all PEs
     integer :: unique_region_count
     !> The name of each of these unique regions
@@ -79,10 +86,12 @@ contains
     !! region on PE rank. If that PE does not have the region then we
     !! store a zero.
     integer, allocatable, dimension(:,:) :: unique_region_map
+
     logical :: is_unique
     
     integer :: ierr, myrank, nranks
     integer :: j, jt, itimer, irank, index, ichar
+    real(r_def) :: time
 
     myrank = get_rank()
     nranks = num_ranks()
@@ -126,10 +135,11 @@ contains
     call MPI_Gather(labels_merged, ntimers*LABEL_LEN, MPI_CHARACTER, &
                     labels_ranks, ntimers*LABEL_LEN, MPI_CHARACTER, 0,   &
                     MPI_COMM_WORLD, ierr)
-
+    ! No. of times each region is visited on each PE
     call MPI_Gather(visit_counts(:,1), ntimers, MPI_INTEGER, &
                     all_counts, ntimers, MPI_INTEGER, 0, &
                     MPI_COMM_WORLD, ierr)
+    ! The timings themselves
     call MPI_Gather(times(:,1), ntimers, MPI_DOUBLE_PRECISION, &
                     all_times, ntimers, MPI_DOUBLE_PRECISION, 0, &
                     MPI_COMM_WORLD, ierr)
@@ -182,26 +192,48 @@ contains
        end do
 
        write (*,*) "We have ",unique_region_count," unique timed regions"
+       ! Loop over the unique timers we've identified and collect the stats
+       ! from the corresponding timer on each rank
+       min_times(1,:,:) = 1.0E20
+       max_times(1,:,:) = -1.0
+       sum_times(:,:) = 0.0_r_def
+       sum_counts(:,:) = 0
        do itimer = 1, unique_region_count
-          write (*,"(I3,': ',(A), ' - Appears on ',I3,' ranks')") itimer, TRIM(unique_region_labels(itimer)), unique_region_pe_count(itimer)
+          write (*,*) itimer, unique_region_pe_count(itimer), TRIM(unique_region_labels(itimer))
+          ! Write back the labels into the original list so that they are
+          ! in the same order as the rest of the data
+          region_names(itimer,1) = unique_region_labels(itimer)
+          do irank = 1, nranks
+             ! What index did this timer have on rank irank?
+             index = unique_region_map(itimer, irank)
+             ! Check whether this rank has used this timed region - if not
+             ! then we skip it
+             if(index == 0) cycle
+             ! It's possible that a process might register a region but then
+             ! never visit it so check for that
+             if(all_counts((irank-1)*ntimers + index) == 0) cycle
+
+             sum_counts(itimer, 1) = sum_counts(itimer, 1) + &
+                                     all_counts((irank-1)*ntimers + index)
+
+             time = all_times((irank-1)*ntimers + index)
+             ! Minimum time spent in this region by any rank
+             if(min_times(1,itimer,1) > time)then
+                min_times(1,itimer,1) = time
+                min_times(2,itimer,1) = irank
+             end if
+             ! Maximum time spent in this region by any rank
+             if(max_times(1,itimer,1) < time)then
+                max_times(1,itimer,1) = time
+                max_times(2,itimer,1) = irank
+             end if
+             ! Total time spent in this region summed over ranks
+             sum_times(itimer,1) = sum_times(itimer,1) + time
+          end do
        end do
 
     end if ! rank 0
 
-    ! For each timed region, find the maximum time spent inside it and
-    ! the rank of the corresponding process.
-    ! ARPDBG this is just for thread 1 currently
-    call MPI_Reduce(times_ranks(:,:,1), max_times(:,:,1), ntimers,  &
-                    MPI_2DOUBLE_PRECISION, MPI_MAXLOC, 0,           &
-                    MPI_COMM_WORLD, ierr)
-
-    ! Ditto for the minimum
-    call MPI_Reduce(times_ranks(:,:,1), min_times(:,:,1), ntimers, &
-                    MPI_2DOUBLE_PRECISION, MPI_MINLOC, 0,          &
-                    MPI_COMM_WORLD, ierr)
-    ! The total time spent in each region summed over all processes
-    call MPI_Reduce(times(:,1), sum_times(:,1), ntimers,  &
-                    MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
     return
   end subroutine calc_dm_timer_stats
 
