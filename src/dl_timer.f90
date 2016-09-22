@@ -1,6 +1,7 @@
 MODULE dl_timer
   use iso_c_binding
   use intel_timer_mod
+  use dl_timer_constants_mod
 !$ USE omp_lib
   IMPLICIT none
 
@@ -31,24 +32,6 @@ MODULE dl_timer
    !! DM parallel, only rank 0 writes out time-line data.
    LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
-   !------------------------------------------------------------------
-   ! Type definitions
-   !> double precision (real 8)
-   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
-   !> 32-bit integer
-   INTEGER, PARAMETER :: idef32 = selected_int_kind(9)
-   !> 64-bit integer
-   INTEGER, PARAMETER :: idef64 = selected_int_kind(12)
-   !> Single precision
-   INTEGER, PARAMETER :: sp = KIND(1.0)
-
-   !> Tolerance below which we consider a number to be zero
-   REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
-
-   !> Unit for stdout
-   INTEGER, PARAMETER :: OUT_UNIT = 6
-   INTEGER, PARAMETER :: ERR_UNIT = 6
-
    !-------------------------------------------------------------------
    ! Parameters and types for the timing routines
 
@@ -62,14 +45,6 @@ MODULE dl_timer
                               !! without pre-registering timer
    REAL(wp) :: prereg_overhead !< Overhead of calling dl_timer start/stop
                                !! API when timer is pre-registered
-
-   !> Maximum length of the label for a timed region
-   INTEGER, PARAMETER :: LABEL_LEN  = 128
-   !> Maximum number of distinct timed regions that an application
-   !! may have 
-   INTEGER, PARAMETER :: MAX_TIMERS = 30
-   !> How many samples to keep when recording a time-line
-   INTEGER, PARAMETER :: TIME_SERIES_LEN = 10000
 
    TYPE :: timer_type
       !> The name of this timed region
@@ -379,7 +354,8 @@ CONTAINS
 
    subroutine timer_register(idx, label, num_repeats)
      implicit none
-     !> Register a timer with the supplied string as its name.
+     !> Register a timer with the supplied string as its name. This reduces
+     !! the overhead associated with calling timer_start().
      !! Return an integer handle.
      !> The name of the timed region
      character (*), intent(in) :: label
@@ -539,6 +515,10 @@ CONTAINS
      ! MPI parallel
      real(wp), allocatable, dimension(:,:,:) :: max_times, min_times
      real(wp), allocatable, dimension(:,:) :: raw_times, sum_times
+     !> Mapping from region index to region label for each rank
+     character(len=LABEL_LEN), allocatable, dimension(:,:) :: region_names
+     !> Number of times each region visited on this PE and thread
+     integer, allocatable, dimension(:,:) :: counts
      !> The maximum number of header lines
      integer, parameter :: HEADER_LINES = 6
      !> The number of header lines that have content
@@ -554,10 +534,15 @@ CONTAINS
 
      if( is_parallel() )then
 
-        ! If this is a parallel run then, for each timed region, we want
-        ! the minimum, maximum and sum (over all processes) of the time
-        ! spent inside it.
-        allocate(raw_times(MAX_TIMERS, nThreads), &
+        ! If this is a parallel run then we need to construct a list
+        ! of all of the timed regions visited by all processes.
+        ! Different processes may have visited different regions.
+
+        ! For each timed region, we want the minimum, maximum and sum
+        ! (over all processes) of the time spent inside it.
+        allocate(region_names(MAX_TIMERS, nThreads), &
+                 counts(MAX_TIMERS, nThreads),    &
+                 raw_times(MAX_TIMERS, nThreads), &
                  max_times(2, MAX_TIMERS, nThreads), &
                  min_times(2, MAX_TIMERS, nThreads), &
                  sum_times(MAX_TIMERS, nThreads), Stat=ierr)
@@ -568,15 +553,20 @@ CONTAINS
         end if
 
         ! We must pack the timing data into an array suitable for the
-        ! reduction operations
+        ! reduction operations.
+        ! Initialise the array of names to contain whitespace.
+        region_names(:,:) = " "
         do jt = 1, nThreads, 1
            do itimer = 1, itimerCount(jt)
+              region_names(itimer,jt) = timer(itimer,jt)%label
+              counts(itimer,jt) = timer(itimer,jt)%count
               raw_times(itimer,jt) = timer(itimer,jt)%total
            end do
         end do
 
-        call calc_dm_timer_stats(nThreads, MAX_TIMERS, raw_times, &
-                                 max_times, min_times, sum_times)
+        call calc_dm_timer_stats(nThreads, MAX_TIMERS, region_names, &
+                                 counts, &
+                                 raw_times, max_times, min_times, sum_times)
      end if
 
      select case(base_timer)

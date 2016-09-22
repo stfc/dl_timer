@@ -4,11 +4,8 @@ module dl_timer_parallel
   !! to compile without requiring MPI to be installed.
   !! When performing an MPI build we use parallel_mpi.f90
   !! instead.
+  use dl_timer_constants_mod
   implicit none
-
-  ! This kind parameter definition is repeated from dl_timer.f90. We
-  ! could fix this by having a global types module.
-  integer, parameter :: wp = SELECTED_REAL_KIND(12,307)
 
 contains
 
@@ -36,7 +33,9 @@ contains
   !=========================================================================
 
   subroutine calc_dm_timer_stats(nThreads, ntimers, &
-                                 times, max_times, min_times, sum_times)
+                                 times, region_names, &
+                                 max_times, min_times, sum_times)
+    character(len=LABEL_LEN), dimension(ntimers,nThreads) :: region_names
     integer,                                  intent(in) :: nThreads, ntimers
     real(wp),                                 intent(in) :: times(ntimers, &
                                                                   nThreads)

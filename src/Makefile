@@ -1,6 +1,7 @@
 # Modules that are independent of which compiler we're using
 # and of whether we're using MPI
-COMMON_MODULES = posix_clock.o gettofd.o intel_timer.o intel_timer_mod.o
+COMMON_MODULES = posix_clock.o gettofd.o dl_timer_constants_mod.o \
+                 intel_timer.o intel_timer_mod.o
 
 SM_MODULES = parallel_stub.o
 DM_MODULES = parallel_mpi.o
