@@ -521,6 +521,8 @@ CONTAINS
      integer(i_def64), allocatable, dimension(:,:) :: counts
      !> The total number of visits summed over all PEs
      integer(i_def64), allocatable, dimension(:,:) :: sum_counts
+     !> The number of PEs for which each unique timer region is active
+     integer, allocatable, dimension(:) :: num_pes_active
      !> The maximum number of header lines
      integer, parameter :: HEADER_LINES = 6
      !> The number of header lines that have content
@@ -548,7 +550,8 @@ CONTAINS
                  max_times(2, MAX_TIMERS, nThreads), &
                  min_times(2, MAX_TIMERS, nThreads), &
                  sum_times(MAX_TIMERS, nThreads),    &
-                 sum_counts(MAX_TIMERS, nThreads), Stat=ierr)
+                 sum_counts(MAX_TIMERS, nThreads),   &
+                 num_pes_active(MAX_TIMERS), Stat=ierr)
         if(ierr /= 0)then
            write(*,"('Timer report: failed to allocate memory to gather ', &
                    & 'MPI stats: no timing report generated')")
@@ -559,6 +562,7 @@ CONTAINS
         ! reduction operations.
         ! Initialise the array of names to contain whitespace.
         region_names(:,:) = " "
+        counts(:,:) = 0
         do jt = 1, nThreads, 1
            do itimer = 1, itimerCount(jt)
               region_names(itimer,jt) = timer(itimer,jt)%label
@@ -567,9 +571,9 @@ CONTAINS
            end do
         end do
 
-        call calc_dm_timer_stats(nThreads, MAX_TIMERS, region_names, &
-                                 counts, &
-                                 raw_times, max_times, min_times, sum_times, sum_counts)
+        call calc_dm_timer_stats(nThreads, MAX_TIMERS, region_names, counts, &
+                                 raw_times, max_times, min_times, sum_times, &
+                                 sum_counts, num_pes_active)
      end if
 
      select case(base_timer)
@@ -640,7 +644,7 @@ CONTAINS
      if(is_parallel())then
         call timer_report_parallel(timer_str, nlines, max_times, &
                                    min_times, sum_times, sum_counts, &
-                                   region_names)
+                                   num_pes_active, region_names)
      else
         if(have_repeats)then
            call timer_report_with_repeats(timer_str, nlines)
@@ -769,7 +773,8 @@ CONTAINS
    !==========================================================================
 
    subroutine timer_report_parallel(timer_str, nlines, max_times, &
-                                    min_times, sum_times, sum_counts, names)
+                                    min_times, sum_times, sum_counts, &
+                                    npes_active, names)
      use dl_timer_parallel, only: get_rank, num_ranks
      !> Write the timing report when we're MPI parallel
      IMPLICIT none
@@ -779,6 +784,8 @@ CONTAINS
                                      sum_times(:,:)
      integer(i_def64), intent(in) :: sum_counts(:,:)
      character(len=LABEL_LEN), intent(in) :: names(:,:)
+     !> The number of PEs which are active in each timed region
+     integer,          intent(in) :: npes_active(:)
      ! Locals
      integer       :: ji, jt
      integer       :: rank, nproc
@@ -805,22 +812,26 @@ CONTAINS
 
            do ji=1, MAX_TIMERS ! itimerCount(jt),1
 
+              ! If no PE ever visited this timed region then skip it
               if (sum_counts(ji,1) == 0) cycle
 
               ! Convert the ranks to strings as that allows us to produce nicer
               ! formatting
               write(minrank,"(I8)") INT(min_times(2,ji,jt))
               write(maxrank,"(I8)") INT(max_times(2,ji,jt))
-              write(expcount, "(I8)") sum_counts(ji,1) ! HYBRID TODO
+              ! Mean no. of visits per PE (using only the count of PEs
+              ! for which this timed region is active)
+              write(expcount, "(I8)") sum_counts(ji,1)/npes_active(ji) ! HYBRID TODO
               write(impcount, "(I8)") timer(ji,jt)%nrepeat
               repeat_str = ""
               write(repeat_str,"((A),'(',(A),')')") TRIM(ADJUSTL(expcount)), &
                                                     TRIM(ADJUSTL(impcount))
 
               ! Total no. of repeats of the region is product of
-              ! no. of visits with the number of (implicit) repeats
-              ! specified when the timed-region was created.
-              rcount = 1.0d0/REAL(sum_counts(ji,1), kind=r_def)
+              ! no. of visits (per active PE) with the number of
+              ! (implicit) repeats specified when the timed-region was
+              ! created.
+              rcount = 1.0d0/REAL(sum_counts(ji,1)/npes_active(ji), kind=r_def)
               rnrepeat = 1.0d0/REAL(timer(ji,jt)%nrepeat, kind=r_def)
 
               ! Truncate the label to 20 chars for table-formatting purposes

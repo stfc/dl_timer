@@ -46,7 +46,8 @@ contains
 
   subroutine calc_dm_timer_stats(nThreads, ntimers, region_names, &
                                  visit_counts, times,             &
-                                 max_times, min_times, sum_times, sum_counts)
+                                 max_times, min_times, sum_times, &
+                                 sum_counts, npes_active)
     integer,                                  intent(in) :: nThreads, ntimers
     !> The name of each timer on this process. On return holds a list of
     !! all active timers from any rank.
@@ -64,6 +65,10 @@ contains
     real(r_def), dimension(ntimers,nThreads),   intent(out) :: sum_times
     !> The no. of times each region is visited, summed over all PEs
     integer(i_def64), dimension(ntimers, nThreads), intent(out) :: sum_counts
+    !> On return holds the number of PES that have visited each unique
+    !! timed region
+    integer, dimension(ntimers), intent(out) :: npes_active
+    !-----------------------------------------------------------------------
     ! Locals
     real(r_def), allocatable, dimension(:,:,:) :: times_ranks
     ! The names of all timers on all ranks packed into a 1D array. We can do
@@ -73,7 +78,7 @@ contains
     character(len=1), allocatable, dimension(:) :: labels_merged
     character(len=LABEL_LEN), allocatable, dimension(:,:) :: region_names_by_rank
     !> Array to store gather of the counts from all timers on all ranks
-    integer, allocatable :: all_counts(:)
+    integer(i_def64), allocatable :: all_counts(:)
     !> Array to store gather of the times from all timers on all ranks
     real(r_def), allocatable :: all_times(:)
     !> The number of uniquely-named timed-regions across all PEs
@@ -86,7 +91,8 @@ contains
     !! region on PE rank. If that PE does not have the region then we
     !! store a zero.
     integer, allocatable, dimension(:,:) :: unique_region_map
-
+    !> Will store appropriate MPI type for a 64-bit integer
+    integer :: int64_mpi_type
     logical :: is_unique
     
     integer :: ierr, myrank, nranks
@@ -136,9 +142,12 @@ contains
                     labels_ranks, ntimers*LABEL_LEN, MPI_CHARACTER, 0,   &
                     MPI_COMM_WORLD, ierr)
     ! No. of times each region is visited on each PE
-    call MPI_Gather(visit_counts(:,1), ntimers, MPI_INTEGER, &
-                    all_counts, ntimers, MPI_INTEGER, 0, &
+    ! We have to set-up a 64-bit integer type for MPI
+    call MPI_Type_match_size(MPI_TYPECLASS_INTEGER, 8, int64_mpi_type, ierr)
+    call MPI_Gather(visit_counts(:,1), ntimers, int64_mpi_type, &
+                    all_counts, ntimers, int64_mpi_type, 0, &
                     MPI_COMM_WORLD, ierr)
+
     ! The timings themselves
     call MPI_Gather(times(:,1), ntimers, MPI_DOUBLE_PRECISION, &
                     all_times, ntimers, MPI_DOUBLE_PRECISION, 0, &
@@ -146,19 +155,15 @@ contains
 
     if(myrank == 0)then
 
-       unique_region_pe_count(:) = 0
        unique_region_map(:,:) = 0
 
        ! Unpack the timed-region labels from arrays back into strings
        do irank = 1, nranks
-          !write (*,*) "Timer labels on rank ", irank-1
           do itimer = 1, ntimers
              index = ((irank-1)*ntimers + itimer - 1)*LABEL_LEN + 1
              do ichar = 1, LABEL_LEN
                 region_names_by_rank(irank,itimer)(ichar:ichar) = labels_ranks(index+ichar-1)
              end do
-             !write (*,"('  ',I3,': ', (A))") itimer, &
-             !                        TRIM(region_names_by_rank(irank, itimer))
           end do
        end do
 
@@ -171,7 +176,8 @@ contains
              if(len_trim(region_names_by_rank(irank,itimer)) == 0)cycle
              is_unique = .TRUE.
              do j = 1, unique_region_count
-                if (region_names_by_rank(irank,itimer) == unique_region_labels(j)) then
+                if (region_names_by_rank(irank,itimer) == &
+                    unique_region_labels(j)) then
                    is_unique = .FALSE.
                    exit
                 end if
@@ -179,13 +185,12 @@ contains
              if (is_unique) then
                 ! We haven't seen a region with this name before
                 unique_region_count = unique_region_count + 1
-                unique_region_labels(unique_region_count) = region_names_by_rank(irank,itimer)
+                unique_region_labels(unique_region_count) = &
+                                          region_names_by_rank(irank,itimer)
                 ! Store the index of this region on this PE
-                unique_region_pe_count(j) = 1
                 unique_region_map(unique_region_count,irank) = itimer
              else
                 ! We have seen this region before. Store its index on this PE.
-                unique_region_pe_count(j) = unique_region_pe_count(j) + 1
                 unique_region_map(j, irank) = itimer
              end if
           end do
@@ -198,8 +203,8 @@ contains
        max_times(1,:,:) = -1.0
        sum_times(:,:) = 0.0_r_def
        sum_counts(:,:) = 0
+       npes_active(:) = 0
        do itimer = 1, unique_region_count
-          write (*,*) itimer, unique_region_pe_count(itimer), TRIM(unique_region_labels(itimer))
           ! Write back the labels into the original list so that they are
           ! in the same order as the rest of the data
           region_names(itimer,1) = unique_region_labels(itimer)
@@ -212,6 +217,10 @@ contains
              ! It's possible that a process might register a region but then
              ! never visit it so check for that
              if(all_counts((irank-1)*ntimers + index) == 0) cycle
+
+             ! Increment the count of PEs for which this timed region is
+             ! active
+             npes_active(itimer) = npes_active(itimer) + 1
 
              sum_counts(itimer, 1) = sum_counts(itimer, 1) + &
                                      all_counts((irank-1)*ntimers + index)
