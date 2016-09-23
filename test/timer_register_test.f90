@@ -1,12 +1,11 @@
 !> Simple program to test the timing API
 PROGRAM timer_test
   use dl_timer
-
-  integer, parameter :: r_def = KIND(1.0d0)
+  use dl_timer_constants_mod
 
   integer :: timer0, timer1
   integer :: istep
-  integer, parameter :: nstep = 1000
+  integer(i_def64), parameter :: nstep = 1000
 
   real(r_def) :: mysum
   !--------------------------------------------------------------
