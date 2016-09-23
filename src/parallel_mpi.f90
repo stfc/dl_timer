@@ -85,8 +85,6 @@ contains
     integer :: unique_region_count
     !> The name of each of these unique regions
     character(len=LABEL_LEN), allocatable, dimension(:) :: unique_region_labels
-    !> The number of PEs that have each region
-    integer, allocatable, dimension(:) :: unique_region_pe_count
     !> unique_timer_map(timer, rank) gives the index of the unique timed
     !! region on PE rank. If that PE does not have the region then we
     !! store a zero.
@@ -107,7 +105,6 @@ contains
              labels_ranks(ntimers*nranks*LABEL_LEN), &
              region_names_by_rank(nranks,ntimers),   &
              unique_region_labels(ntimers),          &
-             unique_region_pe_count(ntimers),        &
              unique_region_map(ntimers, nranks),     &
              all_counts(ntimers*nranks), all_times(ntimers*nranks), &
              Stat=ierr)
