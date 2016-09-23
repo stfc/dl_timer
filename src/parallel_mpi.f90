@@ -193,7 +193,6 @@ contains
           end do
        end do
 
-       write (*,*) "We have ",unique_region_count," unique timed regions"
        ! Loop over the unique timers we've identified and collect the stats
        ! from the corresponding timer on each rank
        min_times(1,:,:) = 1.0E20
