@@ -50,18 +50,18 @@ contains
                                  sum_counts, npes_active)
     integer,                                  intent(in) :: nThreads, ntimers
     !> The name of each timer on this process. On return holds a list of
-    !! all active timers from any rank.
+    !! all unique active timers aggregated over ranks.
     character(len=LABEL_LEN), dimension(ntimers,nThreads), intent(inout) :: region_names
     !> The total time spent in each region by each thread on this process
     real(r_def), dimension(ntimers,nThreads),    intent(in) :: times
     !> The number of times each thread on this process has visited each
     !! timed region. (Can be zero.)
     integer(i_def64), dimension(ntimers, nThreads), intent(in) :: visit_counts
-    !> Max/Min time spent in region together with rank of corresponding PE
-    !! Time is in (1,x,y), rank is in (2,x,y).
+    !> Max/Min time spent in region for a single visit together with
+    !! rank of corresponding PE. Time is in (1,x,y), rank is in (2,x,y).
     real(r_def), dimension(2,ntimers,nThreads), intent(out) :: max_times, &
                                                                min_times
-    !> The time spent in each region, summed over all PEs
+    !> The time spent in each region, summed over all active PEs and visits 
     real(r_def), dimension(ntimers,nThreads),   intent(out) :: sum_times
     !> The no. of times each region is visited, summed over all PEs
     integer(i_def64), dimension(ntimers, nThreads), intent(out) :: sum_counts
@@ -91,17 +91,19 @@ contains
     integer, allocatable, dimension(:,:) :: unique_region_map
     !> Will store appropriate MPI type for a 64-bit integer
     integer :: int64_mpi_type
+    ! No. of times a given PE has visited a region
+    integer(i_def64) :: ncounts_on_pe
     logical :: is_unique
     
     integer :: ierr, myrank, nranks
     integer :: j, jt, itimer, irank, index, ichar
-    real(r_def) :: time
+    real(r_def) :: time, time_per_visit
 
     myrank = get_rank()
     nranks = num_ranks()
 
-    allocate(times_ranks(2,ntimers,nThreads), &
-             labels_merged(ntimers*LABEL_LEN), &
+    allocate(times_ranks(2,ntimers,nThreads),        &
+             labels_merged(ntimers*LABEL_LEN),       &
              labels_ranks(ntimers*nranks*LABEL_LEN), &
              region_names_by_rank(nranks,ntimers),   &
              unique_region_labels(ntimers),          &
@@ -198,7 +200,7 @@ contains
        min_times(1,:,:) = 1.0E20
        max_times(1,:,:) = -1.0
        sum_times(:,:) = 0.0_r_def
-       sum_counts(:,:) = 0
+       sum_counts(:,:) = 0_i_def64
        npes_active(:) = 0
        do itimer = 1, unique_region_count
           ! Write back the labels into the original list so that they are
@@ -212,25 +214,29 @@ contains
              if(index == 0) cycle
              ! It's possible that a process might register a region but then
              ! never visit it so check for that
-             if(all_counts((irank-1)*ntimers + index) == 0) cycle
+             ncounts_on_pe = all_counts((irank-1)*ntimers + index)
+             if(ncounts_on_pe == 0_i_def64) cycle
 
              ! Increment the count of PEs for which this timed region is
              ! active
              npes_active(itimer) = npes_active(itimer) + 1
+             ! Sum up the total no. of times this region has been visited over
+             ! all PEs
+             sum_counts(itimer, 1) = sum_counts(itimer, 1) + ncounts_on_pe
 
-             sum_counts(itimer, 1) = sum_counts(itimer, 1) + &
-                                     all_counts((irank-1)*ntimers + index)
-
+             ! Stored time is the sum over all visits to the region on this PE
              time = all_times((irank-1)*ntimers + index)
+             time_per_visit = time / REAL(ncounts_on_pe, kind=r_def)
+
              ! Minimum time spent in this region by any rank
-             if(min_times(1,itimer,1) > time)then
-                min_times(1,itimer,1) = time
-                min_times(2,itimer,1) = irank
+             if(min_times(1,itimer,1) > time_per_visit)then
+                min_times(1,itimer,1) = time_per_visit
+                min_times(2,itimer,1) = irank-1
              end if
              ! Maximum time spent in this region by any rank
-             if(max_times(1,itimer,1) < time)then
-                max_times(1,itimer,1) = time
-                max_times(2,itimer,1) = irank
+             if(max_times(1,itimer,1) < time_per_visit)then
+                max_times(1,itimer,1) = time_per_visit
+                max_times(2,itimer,1) = irank-1
              end if
              ! Total time spent in this region summed over ranks
              sum_times(itimer,1) = sum_times(itimer,1) + time

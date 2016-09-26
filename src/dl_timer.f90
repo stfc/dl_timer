@@ -780,19 +780,25 @@ CONTAINS
      IMPLICIT none
      integer,          intent(in) :: nlines
      character(len=*), intent(in) :: timer_str(nlines)
-     real(kind=r_def), intent(in) :: max_times(:,:,:), min_times(:,:,:), &
-                                     sum_times(:,:)
+     !> The maximum and minimum time spent in a *single* visit to each
+     !! region
+     real(kind=r_def), intent(in) :: max_times(:,:,:), min_times(:,:,:)
+     !> The total time spent in each region summed over all PEs and visits
+     real(kind=r_def), intent(in) :: sum_times(:,:)
+     !> The total no. of visits to each region summed over all PEs
      integer(i_def64), intent(in) :: sum_counts(:,:)
      character(len=LABEL_LEN), intent(in) :: names(:,:)
      !> The number of PEs which are active in each timed region
      integer,          intent(in) :: npes_active(:)
+     !------------------------------------------------------------------
      ! Locals
-     integer       :: ji, jt
-     integer       :: rank, nproc
-     real(r_def)      :: rnrepeat, rcount
+     integer           :: ji, jt
+     integer           :: rank, nproc
+     real(r_def)       :: rnrepeat, rcount
      character(len=8)  :: minrank, maxrank
      character(len=8)  :: expcount, impcount
      character(len=18) :: repeat_str
+     real(r_def)       :: min_time, avg_time, max_time
 
      rank = get_rank()
      nproc = num_ranks()
@@ -827,23 +833,34 @@ CONTAINS
               write(repeat_str,"((A),'(',(A),')')") TRIM(ADJUSTL(expcount)), &
                                                     TRIM(ADJUSTL(impcount))
 
-              ! Total no. of repeats of the region is product of
-              ! no. of visits (per active PE) with the number of
-              ! (implicit) repeats specified when the timed-region was
-              ! created.
-              rcount = 1.0d0/REAL(sum_counts(ji,1)/npes_active(ji), kind=r_def)
+              ! sum_counts holds the number of visits summed over all
+              ! active PEs. Similarly, sum_times holds the total time
+              ! spent in this region, summed over all active PEs.
+              ! In contrast (min,max}_time hold the time of a single
+              ! visit to the region.
+              rcount = 1.0d0/REAL(sum_counts(ji,1), kind=r_def)
+              ! Reciprocal of the number of (implicit) repeats
+              ! specified when the timed-region was created.
               rnrepeat = 1.0d0/REAL(timer(ji,jt)%nrepeat, kind=r_def)
 
+              ! The systematic_err is the duration that dl_timer reports
+              ! for a single measurement of an 'empty region'. We
+              ! therefore subtract it from the time we have measured for
+              ! a single visit to the region.
+              ! Minimum time spent in region by any PE that visited it
+              min_time = (min_times(1,ji,jt)-systematic_err(1))*rnrepeat
+              ! Mean time spent in region by all PEs that visited it
+              avg_time = (sum_times(ji,jt)*rcount-systematic_err(1))*rnrepeat
+              ! Maximum time spent in region by any PE that visited it
+              max_time = (max_times(1,ji,jt)-systematic_err(1))*rnrepeat
+
               ! Truncate the label to 20 chars for table-formatting purposes
-              write(OUT_UNIT, "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
-                   names(ji,1)(1:20), TRIM(repeat_str),            &
-                   MAX((min_times(1,ji,jt)*rcount-systematic_err(1))*rnrepeat,&
-                       0.0d0), &
-                   TRIM(ADJUSTL(minrank)),                                &
-                   MAX((sum_times(ji,jt)*rcount/REAL(nproc)-systematic_err(1))*rnrepeat, 0.0d0), &
-                   MAX((max_times(1,ji,jt)*rcount-systematic_err(1))*rnrepeat, &
-                       0.0d0), &
-                   TRIM(ADJUSTL(maxrank))
+              write(OUT_UNIT, &
+               "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
+                   names(ji,1)(1:20), TRIM(repeat_str),                      &
+                   MAX(min_time, 0.0d0), TRIM(ADJUSTL(minrank)),             &
+                   MAX(avg_time, 0.0d0),                                     &
+                   MAX(max_time, 0.0d0), TRIM(ADJUSTL(maxrank))
            end do
         end do
         call write_report_footer(83)
