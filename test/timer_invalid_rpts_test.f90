@@ -1,8 +1,7 @@
 !> Simple program to test the timing API
 PROGRAM timer_test
   use dl_timer
-
-  integer, parameter :: r_def = KIND(1.0d0)
+  use dl_timer_constants_mod
 
   integer :: time0
   integer :: istep
@@ -17,7 +16,7 @@ PROGRAM timer_test
 
   ! Attempt to register a timer with an invalid number of implicit
   ! repeats
-  call timer_start(time0, label='Time-stepping', num_repeats=0)
+  call timer_start(time0, label='Time-stepping', num_repeats=0_i_def64)
 
   do istep = 1, nstep
      mysum = mysum + sqrt(5.0d0*istep*istep)

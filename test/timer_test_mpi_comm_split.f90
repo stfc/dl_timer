@@ -1,14 +1,13 @@
-!> Simple program to test the timing API
+!> Simple MPI program to test the timing API when not all ranks
+!! enter a given timed region
 PROGRAM timer_test
-  use dl_timer
   use dl_timer_constants_mod
+  use dl_timer
   use mpi
   implicit none
 
-  integer :: time0, time1
-  integer :: istep
-  integer(i_def64), parameter :: nstep = 1000
-  integer :: nloops
+  integer :: time0
+  integer(i_def64), parameter :: nstep = 5
 
   real(r_def) :: mysum
 
@@ -36,23 +35,14 @@ PROGRAM timer_test
 
   mysum = 0.0d0
 
-  ! Artificially create a load imbalance
-  nloops = 200*(rank+1)
-
   !--------------------------------------------------------------
   ! Time-stepping
 
   call timer_start(time0, label='Time-stepping', num_repeats=nstep)
 
-  do istep = 1, nstep
-
-     call timer_start(time1, label='Fake section')
-     do j = 1, nloops
-        mysum = mysum + sqrt(5.0d0*istep*istep)
-     end do
-     call timer_stop(time1)
-
-  end do
+  ! Don't do time-stepping on odd ranks so that not all PEs enter the
+  ! 'fake section' region
+  if (mod(rank,2) == 0) call step()
 
   call timer_stop(time0)
 
@@ -67,4 +57,29 @@ PROGRAM timer_test
   ! Tell the MPI library to release all resources it is using:
   call MPI_FINALIZE(ierr)
 
+contains
+
+  !--------------------------------------------------------------
+  subroutine step()
+    use timer_test_utils_mod, only: fsleep
+    implicit none
+    ! Locals
+    integer :: istep, time1, nloops, ret
+    
+    ! Artificially create a load imbalance
+    nloops = 200*(rank+1)
+
+    do istep = 1, nstep
+
+       call timer_start(time1, label='Fake section')
+       do j = 1, nloops
+          mysum = mysum + sqrt(5.0d0*istep*istep)
+       end do
+       ret = fsleep(1)
+       call timer_stop(time1)
+
+    end do
+
+  end subroutine step
+  
 END PROGRAM timer_test

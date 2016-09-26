@@ -4,11 +4,8 @@ module dl_timer_parallel
   !! to compile without requiring MPI to be installed.
   !! When performing an MPI build we use parallel_mpi.f90
   !! instead.
+  use dl_timer_constants_mod
   implicit none
-
-  ! This kind parameter definition is repeated from dl_timer.f90. We
-  ! could fix this by having a global types module.
-  integer, parameter :: wp = SELECTED_REAL_KIND(12,307)
 
 contains
 
@@ -35,16 +32,27 @@ contains
 
   !=========================================================================
 
-  subroutine calc_dm_timer_stats(nThreads, ntimers, &
-                                 times, max_times, min_times, sum_times)
-    integer,                                  intent(in) :: nThreads, ntimers
-    real(wp),                                 intent(in) :: times(ntimers, &
-                                                                  nThreads)
-    real(wp), dimension(2,ntimers,nThreads), intent(out) :: max_times, min_times
-    real(wp), dimension(ntimers,nThreads),   intent(out) :: sum_times
+  subroutine calc_dm_timer_stats(nThreads, ntimers, region_names, &
+                                 visit_counts, times,             &
+                                 max_times, min_times, sum_times, &
+                                 sum_counts, npes_active)
+    !> Stub interface. Routine itself does nothing in absence of MPI.
+    character(len=LABEL_LEN), intent(inout) :: region_names(ntimers,nThreads)
+    integer,                     intent(in) :: nThreads, ntimers
+    integer(i_def64),            intent(in) :: visit_counts(ntimers, nThreads)
+    real(r_def),                 intent(in) :: times(ntimers, nThreads)
+    real(r_def), dimension(2,ntimers,nThreads), intent(out) :: max_times, &
+                                                               min_times
+    real(r_def), dimension(ntimers,nThreads),   intent(out) :: sum_times
+    integer(i_def64), dimension(ntimers,nThreads), intent(out) :: sum_counts
+    integer, dimension(ntimers), intent(out) :: npes_active
+    ! Pretend to use our arguments so that the compiler doesn't complain
+    region_names(:,:) = region_names(1,1)
     max_times(1,:,:) = times(:,:)
     min_times(:,:,:) = 0.0
     sum_times(:,:) = 0.0
+    sum_counts(:,:) = visit_counts(:,:)
+    npes_active(:) = 0
   end subroutine calc_dm_timer_stats
 
 end module dl_timer_parallel

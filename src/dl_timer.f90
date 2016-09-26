@@ -1,6 +1,7 @@
 MODULE dl_timer
   use iso_c_binding
   use intel_timer_mod
+  use dl_timer_constants_mod
 !$ USE omp_lib
   IMPLICIT none
 
@@ -31,64 +32,38 @@ MODULE dl_timer
    !! DM parallel, only rank 0 writes out time-line data.
    LOGICAL, PARAMETER :: record_time_series = .FALSE.
 
-   !------------------------------------------------------------------
-   ! Type definitions
-   !> double precision (real 8)
-   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
-   !> 32-bit integer
-   INTEGER, PARAMETER :: idef32 = selected_int_kind(9)
-   !> 64-bit integer
-   INTEGER, PARAMETER :: idef64 = selected_int_kind(12)
-   !> Single precision
-   INTEGER, PARAMETER :: sp = KIND(1.0)
-
-   !> Tolerance below which we consider a number to be zero
-   REAL(wp), PARAMETER :: TOL_ZERO  = 1.0E-10
-
-   !> Unit for stdout
-   INTEGER, PARAMETER :: OUT_UNIT = 6
-   INTEGER, PARAMETER :: ERR_UNIT = 6
-
    !-------------------------------------------------------------------
    ! Parameters and types for the timing routines
 
    INTEGER :: iclk_rate !< Ticks per second of Fortran timer
    INTEGER :: iclk_max  !< Max value that Fortran timer can return
-   REAL(wp) :: clock_tick_s !< Time in seconds between clock ticks
-   REAL(wp) :: systematic_err(2) !< Measured systematic error (in the
+   REAL(r_def) :: clock_tick_s !< Time in seconds between clock ticks
+   REAL(r_def) :: systematic_err(2) !< Measured systematic error (in the
                                  !! units of the chosen clock) and 
                                  !! associated std err
-   REAL(wp) :: noreg_overhead !< Overhead of calling dl_timer start/stop API
+   REAL(r_def) :: noreg_overhead !< Overhead of calling dl_timer start/stop API
                               !! without pre-registering timer
-   REAL(wp) :: prereg_overhead !< Overhead of calling dl_timer start/stop
+   REAL(r_def) :: prereg_overhead !< Overhead of calling dl_timer start/stop
                                !! API when timer is pre-registered
-
-   !> Maximum length of the label for a timed region
-   INTEGER, PARAMETER :: LABEL_LEN  = 128
-   !> Maximum number of distinct timed regions that an application
-   !! may have 
-   INTEGER, PARAMETER :: MAX_TIMERS = 30
-   !> How many samples to keep when recording a time-line
-   INTEGER, PARAMETER :: TIME_SERIES_LEN = 10000
 
    TYPE :: timer_type
       !> The name of this timed region
       CHARACTER (LABEL_LEN) :: label
       !> Time at which region was most recently entered
-      REAL       (KIND=wp)  :: istart
+      REAL       (KIND=r_def)  :: istart
       !> Total time spent in this timed region (accumulated over
       !! all visits).
-      REAL       (KIND=wp)  :: total
+      REAL       (KIND=r_def)  :: total
       !> Sum of the square of the times spent in this timed region
       !! (accumulated over all visits).
-      REAL       (KIND=wp)  :: totalsq
+      REAL       (KIND=r_def)  :: totalsq
       !> The no. of times this timed region has been executed.
-      INTEGER (KIND=idef64) :: count
+      INTEGER (KIND=i_def64) :: count
       !> The no. of repeated intervals within this timed region.
       !! Used in timer_report() to produce a mean time per repeat.
       !! Default value is 1. User can specify value in call to
       !! timer_start().
-      INTEGER (KIND=idef64) :: nrepeat
+      INTEGER (KIND=i_def64) :: nrepeat
       !> Single-precision array to hold the individual time periods that we
       !! collect if producing a time-line
       REAL(KIND=sp), ALLOCATABLE :: time_series(:)
@@ -139,7 +114,7 @@ CONTAINS
    !> Returns the current system time using the selected timer
    function time_now()
      implicit none
-     real(wp) :: time_now
+     real(r_def) :: time_now
      integer :: iclk
 
      select case(base_timer)
@@ -147,10 +122,10 @@ CONTAINS
 ! Requires that this file be compiled with OpenMP enabled
 !$      time_now = omp_get_wtime()         
      case(RDTSC_TIMER)
-        time_now = REAL(getticks(), wp)
+        time_now = REAL(getticks(), r_def)
      case(INTRINSIC_TIMER)
         CALL SYSTEM_CLOCK(iclk)
-        time_now = REAL(iclk, wp)
+        time_now = REAL(iclk, r_def)
      case(TOFDAY_TIMER)
         time_now = time_of_day()
      case(POSIX_TIMER)
@@ -258,13 +233,13 @@ CONTAINS
 
    function timer_granularity()
      implicit none
-     real(wp) :: timer_granularity
+     real(r_def) :: timer_granularity
      !> Measure the effective granularity of the timer by calling
      !! it repeatedly and looking at the minimum amount of time
      !! between the times it returns
      integer,  parameter :: ntimes = 10000
-     real(wp) :: times(ntimes)
-     real(wp) :: diff, min_diff
+     real(r_def) :: times(ntimes)
+     real(r_def) :: diff, min_diff
      integer  :: i, j
      do i=1,ntimes
        times(i) = time_now()
@@ -311,19 +286,19 @@ CONTAINS
      ! Calculate and store the average time spent 'doing nothing'.
      ! This is then reported in timer_report() at the end of the run.
      systematic_err(1) = timer(itime2,1)%total / &
-                         REAL(timer(itime2,1)%count, wp)
+                         REAL(timer(itime2,1)%count, r_def)
      ! Calculate and store the statistical error in this result
      systematic_err(2) = time_err(timer(itime2,1))
 
      ! Estimate the overhead in calling the dl_timer start+stop API when
      ! the timer is not pre-registered
      noreg_overhead = (timer(itime1,1)%total - timer(itime2,1)%total) / &
-                REAL(timer(itime2,1)%count, wp)
+                REAL(timer(itime2,1)%count, r_def)
 
      ! Estimate the overhead in calling the dl_timer start+stop API when
      ! the timer has been previously registered
      prereg_overhead = (timer(itime3,1)%total - timer(itime4,1)%total) / &
-                REAL(timer(itime4,1)%count, wp)
+                REAL(timer(itime4,1)%count, r_def)
 
      ! Reset our timers
      call clear_timers()
@@ -344,8 +319,8 @@ CONTAINS
             itimerCount(ith) = 0
             timer(ji,ith)%label  = ""
             timer(ji,ith)%istart = 0_int64
-            timer(ji,ith)%total  = 0_wp
-            timer(ji,ith)%totalsq= 0_wp
+            timer(ji,ith)%total  = 0_r_def
+            timer(ji,ith)%totalsq= 0_r_def
             timer(ji,ith)%count  = 0
             if(RECORD_TIME_SERIES)then
                timer(ji,ith)%time_series(:) = 0.0
@@ -358,20 +333,20 @@ CONTAINS
 
    !=========================================================================
 
-   REAL(wp) FUNCTION time_in_s(clk0,clk1)
+   REAL(r_def) FUNCTION time_in_s(clk0,clk1)
       IMPLICIT none
-      REAL(wp),    INTENT(in) :: clk0
-      REAL(wp), INTENT(inout) :: clk1
+      REAL(r_def),    INTENT(in) :: clk0
+      REAL(r_def), INTENT(inout) :: clk1
       ! This routine only actually returns time in seconds if the
       ! Fortran intrinsic timer (SYSTEM_CLOCK) is being used. Otherwise
       ! iclk_rate has been set to unity and this routine simply returns
       ! the difference between its arguments.
 
       IF(clk1 < clk0)THEN
-         clk1 = clk1 + REAL(iclk_max,wp)
+         clk1 = clk1 + REAL(iclk_max, r_def)
       END IF
 
-      time_in_s =  (clk1 - clk0)/REAL(iclk_rate,wp)
+      time_in_s =  (clk1 - clk0)/REAL(iclk_rate,r_def)
 
    END FUNCTION time_in_s
 
@@ -379,7 +354,8 @@ CONTAINS
 
    subroutine timer_register(idx, label, num_repeats)
      implicit none
-     !> Register a timer with the supplied string as its name.
+     !> Register a timer with the supplied string as its name. This reduces
+     !! the overhead associated with calling timer_start().
      !! Return an integer handle.
      !> The name of the timed region
      character (*), intent(in) :: label
@@ -388,7 +364,7 @@ CONTAINS
      !> The number of repeated intervals inside this timed region.
      !! Used to report a time per interval in the output generated
      !! by timer_report().
-     integer(idef64), intent(in), optional :: num_repeats
+     integer(i_def64), intent(in), optional :: num_repeats
      ! Locals
      !> Index of current thread (1 if not using OpenMP)
      integer :: ith
@@ -462,7 +438,7 @@ CONTAINS
       !> The number of repeated intervals inside this timed region.
       !! Used to report a time per interval in the report generated
       !! by timer_report().
-      INTEGER(idef64), INTENT(in), OPTIONAL :: num_repeats
+      INTEGER(i_def64), INTENT(in), OPTIONAL :: num_repeats
       INTEGER :: ith
 
       ith = 1
@@ -496,7 +472,7 @@ CONTAINS
       !> Stop the specified timer and record the elapsed number of ticks
       !! since it was started.
       INTEGER :: ith
-      REAL(wp) :: thistime, delta_t
+      REAL(r_def) :: thistime, delta_t
 
       ! Stop the clock
       thistime = time_now()
@@ -508,7 +484,7 @@ CONTAINS
 
       if(base_timer == INTRINSIC_TIMER)then
          IF( thistime < timer(itag,ith)%istart )THEN
-            thistime = thistime + REAL(iclk_max,wp)
+            thistime = thistime + REAL(iclk_max, r_def)
          END IF
       end if
 
@@ -537,8 +513,16 @@ CONTAINS
      logical       :: have_repeats
      ! Arrays used to gather stats for each timed region when running
      ! MPI parallel
-     real(wp), allocatable, dimension(:,:,:) :: max_times, min_times
-     real(wp), allocatable, dimension(:,:) :: raw_times, sum_times
+     real(r_def), allocatable, dimension(:,:,:) :: max_times, min_times
+     real(r_def), allocatable, dimension(:,:) :: raw_times, sum_times
+     !> Mapping from region index to region label for each rank
+     character(len=LABEL_LEN), allocatable, dimension(:,:) :: region_names
+     !> Number of times each region visited on this PE and thread
+     integer(i_def64), allocatable, dimension(:,:) :: counts
+     !> The total number of visits summed over all PEs
+     integer(i_def64), allocatable, dimension(:,:) :: sum_counts
+     !> The number of PEs for which each unique timer region is active
+     integer, allocatable, dimension(:) :: num_pes_active
      !> The maximum number of header lines
      integer, parameter :: HEADER_LINES = 6
      !> The number of header lines that have content
@@ -554,13 +538,20 @@ CONTAINS
 
      if( is_parallel() )then
 
-        ! If this is a parallel run then, for each timed region, we want
-        ! the minimum, maximum and sum (over all processes) of the time
-        ! spent inside it.
-        allocate(raw_times(MAX_TIMERS, nThreads), &
+        ! If this is a parallel run then we need to construct a list
+        ! of all of the timed regions visited by all processes.
+        ! Different processes may have visited different regions.
+
+        ! For each timed region, we want the minimum, maximum and sum
+        ! (over all processes) of the time spent inside it.
+        allocate(region_names(MAX_TIMERS, nThreads), &
+                 counts(MAX_TIMERS, nThreads),       &
+                 raw_times(MAX_TIMERS, nThreads),    &
                  max_times(2, MAX_TIMERS, nThreads), &
                  min_times(2, MAX_TIMERS, nThreads), &
-                 sum_times(MAX_TIMERS, nThreads), Stat=ierr)
+                 sum_times(MAX_TIMERS, nThreads),    &
+                 sum_counts(MAX_TIMERS, nThreads),   &
+                 num_pes_active(MAX_TIMERS), Stat=ierr)
         if(ierr /= 0)then
            write(*,"('Timer report: failed to allocate memory to gather ', &
                    & 'MPI stats: no timing report generated')")
@@ -568,15 +559,21 @@ CONTAINS
         end if
 
         ! We must pack the timing data into an array suitable for the
-        ! reduction operations
+        ! reduction operations.
+        ! Initialise the array of names to contain whitespace.
+        region_names(:,:) = " "
+        counts(:,:) = 0
         do jt = 1, nThreads, 1
            do itimer = 1, itimerCount(jt)
+              region_names(itimer,jt) = timer(itimer,jt)%label
+              counts(itimer,jt) = timer(itimer,jt)%count
               raw_times(itimer,jt) = timer(itimer,jt)%total
            end do
         end do
 
-        call calc_dm_timer_stats(nThreads, MAX_TIMERS, raw_times, &
-                                 max_times, min_times, sum_times)
+        call calc_dm_timer_stats(nThreads, MAX_TIMERS, region_names, counts, &
+                                 raw_times, max_times, min_times, sum_times, &
+                                 sum_counts, num_pes_active)
      end if
 
      select case(base_timer)
@@ -646,7 +643,8 @@ CONTAINS
      ! Call the appropriate routine to generate the report
      if(is_parallel())then
         call timer_report_parallel(timer_str, nlines, max_times, &
-                                   min_times, sum_times)
+                                   min_times, sum_times, sum_counts, &
+                                   num_pes_active, region_names)
      else
         if(have_repeats)then
            call timer_report_with_repeats(timer_str, nlines)
@@ -668,7 +666,7 @@ CONTAINS
       integer,          intent(in) :: nlines
       character(len=*), intent(in) :: timer_str(nlines)
       integer       :: ji, jt
-      real(kind=wp) :: wtime
+      real(kind=r_def) :: wtime
       integer       :: rank
 
       rank = get_rank()
@@ -691,7 +689,7 @@ CONTAINS
                if(base_timer == RDTSC_TIMER)then
                   wtime = timer(ji,jt)%total
                else
-                  wtime = time_in_s(0._wp,timer(ji,jt)%total)
+                  wtime = time_in_s(0._r_def,timer(ji,jt)%total)
                end if
 
                ! Truncate the label to 32 chars for table-formatting purposes
@@ -718,7 +716,7 @@ CONTAINS
      integer,          intent(in) :: nlines
      character(len=*), intent(in) :: timer_str(nlines)
      INTEGER       :: ji, jt
-     REAL(KIND=wp) :: wtime, tmean, trepeat, terr
+     REAL(KIND=r_def) :: wtime, tmean, trepeat, terr
      integer :: rank
 
      rank = get_rank()
@@ -740,7 +738,7 @@ CONTAINS
               if(base_timer == RDTSC_TIMER)then
                  wtime = timer(ji,jt)%total
               else
-                 wtime = time_in_s(0._wp,timer(ji,jt)%total)
+                 wtime = time_in_s(0._r_def,timer(ji,jt)%total)
               end if
 
               ! Mean time spent in timed region corrected for systematic err
@@ -775,21 +773,32 @@ CONTAINS
    !==========================================================================
 
    subroutine timer_report_parallel(timer_str, nlines, max_times, &
-                                    min_times, sum_times)
+                                    min_times, sum_times, sum_counts, &
+                                    npes_active, names)
      use dl_timer_parallel, only: get_rank, num_ranks
      !> Write the timing report when we're MPI parallel
      IMPLICIT none
      integer,          intent(in) :: nlines
      character(len=*), intent(in) :: timer_str(nlines)
-     real(kind=wp),    intent(in) :: max_times(:,:,:), min_times(:,:,:), &
-                                     sum_times(:,:)
+     !> The maximum and minimum time spent in a *single* visit to each
+     !! region
+     real(kind=r_def), intent(in) :: max_times(:,:,:), min_times(:,:,:)
+     !> The total time spent in each region summed over all PEs and visits
+     real(kind=r_def), intent(in) :: sum_times(:,:)
+     !> The total no. of visits to each region summed over all PEs
+     integer(i_def64), intent(in) :: sum_counts(:,:)
+     character(len=LABEL_LEN), intent(in) :: names(:,:)
+     !> The number of PEs which are active in each timed region
+     integer,          intent(in) :: npes_active(:)
+     !------------------------------------------------------------------
      ! Locals
-     integer       :: ji, jt
-     integer       :: rank, nproc
-     real(wp)      :: rnrepeat, rcount
+     integer           :: ji, jt
+     integer           :: rank, nproc
+     real(r_def)       :: rnrepeat, rcount
      character(len=8)  :: minrank, maxrank
      character(len=8)  :: expcount, impcount
      character(len=18) :: repeat_str
+     real(r_def)       :: min_time, avg_time, max_time
 
      rank = get_rank()
      nproc = num_ranks()
@@ -800,41 +809,58 @@ CONTAINS
         write(OUT_UNIT,"(23x,'Counts',21x,'Time per repeat*')")
         write(OUT_UNIT,"('Region',14x,'Explicit(Implt)',2x,'Min[rank]',9x,'Mean',9x,'Max[rank]')")
         write(OUT_UNIT,"(83('-'))")
-        do jt = 1, nThreads, 1
+        do jt = 1, 1 ! (TODO support mixed-mode) nThreads, 1
 
-           if(itimerCount(jt) > 0 .AND. nThreads > 1)then
-              if(jt > 1) WRITE(OUT_UNIT, "(39('- '))")
-              WRITE(OUT_UNIT, " ('Thread ',I3)") jt-1
-           end if
+           !if(itimerCount(jt) > 0 .AND. nThreads > 1)then
+           !   if(jt > 1) WRITE(OUT_UNIT, "(39('- '))")
+           !   WRITE(OUT_UNIT, " ('Thread ',I3)") jt-1
+           !end if
 
-           do ji=1,itimerCount(jt),1
+           do ji=1, MAX_TIMERS ! itimerCount(jt),1
+
+              ! If no PE ever visited this timed region then skip it
+              if (sum_counts(ji,1) == 0) cycle
 
               ! Convert the ranks to strings as that allows us to produce nicer
               ! formatting
               write(minrank,"(I8)") INT(min_times(2,ji,jt))
               write(maxrank,"(I8)") INT(max_times(2,ji,jt))
-              write(expcount, "(I8)") timer(ji,jt)%count
+              ! Mean no. of visits per PE (using only the count of PEs
+              ! for which this timed region is active)
+              write(expcount, "(I8)") sum_counts(ji,1)/npes_active(ji) ! HYBRID TODO
               write(impcount, "(I8)") timer(ji,jt)%nrepeat
               repeat_str = ""
               write(repeat_str,"((A),'(',(A),')')") TRIM(ADJUSTL(expcount)), &
                                                     TRIM(ADJUSTL(impcount))
 
-              ! Total no. of repeats of the region is product of no. of visits
-              ! with the number of repeats specified when the timed-region
-              ! was created.
-              rcount = 1.0d0/REAL(timer(ji,jt)%count, kind=wp)
-              rnrepeat = 1.0d0/REAL(timer(ji,jt)%nrepeat, kind=wp)
+              ! sum_counts holds the number of visits summed over all
+              ! active PEs. Similarly, sum_times holds the total time
+              ! spent in this region, summed over all active PEs.
+              ! In contrast (min,max}_time hold the time of a single
+              ! visit to the region.
+              rcount = 1.0d0/REAL(sum_counts(ji,1), kind=r_def)
+              ! Reciprocal of the number of (implicit) repeats
+              ! specified when the timed-region was created.
+              rnrepeat = 1.0d0/REAL(timer(ji,jt)%nrepeat, kind=r_def)
+
+              ! The systematic_err is the duration that dl_timer reports
+              ! for a single measurement of an 'empty region'. We
+              ! therefore subtract it from the time we have measured for
+              ! a single visit to the region.
+              ! Minimum time spent in region by any PE that visited it
+              min_time = (min_times(1,ji,jt)-systematic_err(1))*rnrepeat
+              ! Mean time spent in region by all PEs that visited it
+              avg_time = (sum_times(ji,jt)*rcount-systematic_err(1))*rnrepeat
+              ! Maximum time spent in region by any PE that visited it
+              max_time = (max_times(1,ji,jt)-systematic_err(1))*rnrepeat
 
               ! Truncate the label to 20 chars for table-formatting purposes
-              write(OUT_UNIT, "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
-                   timer(ji,jt)%label(1:20), TRIM(repeat_str),            &
-                   MAX((min_times(1,ji,jt)*rcount-systematic_err(1))*rnrepeat,&
-                       0.0d0), &
-                   TRIM(ADJUSTL(minrank)),                                &
-                   MAX((sum_times(ji,jt)*rcount/REAL(nproc)-systematic_err(1))*rnrepeat, 0.0d0), &
-                   MAX((max_times(1,ji,jt)*rcount-systematic_err(1))*rnrepeat, &
-                       0.0d0), &
-                   TRIM(ADJUSTL(maxrank))
+              write(OUT_UNIT, &
+               "((A),1x,A12,1x,E13.6,' [',(A),']',1x,E13.6,1x,E13.6,' [',(A),']')") &
+                   names(ji,1)(1:20), TRIM(repeat_str),                      &
+                   MAX(min_time, 0.0d0), TRIM(ADJUSTL(minrank)),             &
+                   MAX(avg_time, 0.0d0),                                     &
+                   MAX(max_time, 0.0d0), TRIM(ADJUSTL(maxrank))
            end do
         end do
         call write_report_footer(83)
@@ -931,7 +957,7 @@ CONTAINS
 
    function time_err(timer)
      implicit none
-     real(wp) :: time_err
+     real(r_def) :: time_err
      type(timer_type), intent(in) :: timer
      ! Calculate the error in the mean time duration using the
      ! formula for the standard devation = sqrt(<t^2> - <t>^2)
@@ -940,7 +966,7 @@ CONTAINS
      ! The error in our estimate of a population mean from N samples 
      ! is stdev / sqrt(N - 1)
      if (timer%count > 1) then
-        time_err = time_err / SQRT(REAL(timer%count - 1, wp))
+        time_err = time_err / SQRT(REAL(timer%count - 1, r_def))
      end if
 
    end function time_err
