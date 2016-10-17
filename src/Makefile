@@ -13,14 +13,14 @@ all: sm_build
 .PHONY: sm_build
 sm_build:
 	${MAKE} MODULES="${COMMON_MODULES} ${SM_MODULES}" \
-                LIB_NAME=${LIB_NAME} FC=${F90} \
+                LIB_NAME="${LIB_NAME}" FC="${F90}" \
                 FFLAGS="${F90FLAGS} ${OMPFLAGS}" lib
 
 # Target for Distributed-memory (MPI) parallelism
 .PHONY: dm_build
 dm_build:
 	${MAKE} MODULES="${COMMON_MODULES} ${DM_MODULES}" \
-                LIB_NAME=${LIB_NAME} FC=${MPIF90} \
+                LIB_NAME="${LIB_NAME}" FC="${MPIF90}" \
                 FFLAGS="${F90FLAGS}" lib
 
 lib: ${MODULES} dl_timer.o
