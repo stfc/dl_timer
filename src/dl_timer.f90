@@ -608,26 +608,26 @@ CONTAINS
              "('Timed using POSIX timer. Units are seconds.')")        
         nlines = nlines + 1
         write(timer_str(nlines), &
-             "('Reported resolution = ',1E10.4,' (s)')") clock_tick_s
+             "('Reported resolution = ',1E11.4,' (s)')") clock_tick_s
      case default
         return
      end select
 
      nlines = nlines + 1
      write (timer_str(nlines), &
-          "('Effective clock granularity = ', 1E11.5,' (',(A),')')")  &
+          "('Effective clock granularity = ', 1E12.5,' (',(A),')')")  &
           timer_granularity(), TRIM(units_str)
      nlines = nlines + 1
      write (timer_str(nlines), &
-          "('Measured systematic error in dl_timer API = ', 1E11.5,' +/-',1E10.3,' (',(A),')')") &
+          "('Measured systematic error in dl_timer API = ', 1E12.5,' +/-',1E10.3,' (',(A),')')") &
           systematic_err(1), systematic_err(2), TRIM(units_str)
      nlines = nlines + 1
      write (timer_str(nlines), &
-        "('Measured overhead in calling start/stop = ',1E10.4,' (',(A),')')") &
+        "('Measured overhead in calling start/stop = ',1E11.4,' (',(A),')')") &
         noreg_overhead, TRIM(units_str)
      nlines = nlines + 1
      write (timer_str(nlines), &
-        "('Measured overhead in calling start/stop for registered timer = ',1E10.4,' (',(A),')')") &
+        "('Measured overhead in calling start/stop for registered timer = ',1E11.4,' (',(A),')')") &
         prereg_overhead, TRIM(units_str)
 
      ! Check whether any of our timed regions have a non-unity
