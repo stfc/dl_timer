@@ -106,7 +106,7 @@ MODULE dl_timer
   ! Publicly-accessible routines
 
   PUBLIC timer_init, timer_register, timer_start, timer_stop, timer_report
-
+  PUBLIC i_def32, i_def64, r_def
 CONTAINS
 
    !======================================================================
