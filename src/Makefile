@@ -45,10 +45,10 @@ parallel_mpi.o: parallel_mpi.f90
 	$(FC) $(FFLAGS) -c $<
 
 %.o: %.f90
-	$(F90) $(FFLAGS) -c $<
+	$(FC) $(FFLAGS) -c $<
 
 %.o: %.F90
-	$(F90) $(FFLAGS) -c $<
+	$(FC) $(FFLAGS) -c $<
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<
