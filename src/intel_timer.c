@@ -35,9 +35,15 @@ unsigned long tacc_rdtscp(int *chip, int *core)
 {
   unsigned a, d, c;
 
+#if defined __INTEL_COMPILER
   __asm__ volatile("rdtscp" : "=a" (a), "=d" (d), "=c" (c));
   *chip = (c & 0xFFF000)>>12;
   *core = c & 0xFFF;
 
   return ((unsigned long)a) | (((unsigned long)d) << 32);;
+#else
+  fprintf(stderr, "TIMING: ERROR: attempting to use tacc_rdtscp when "
+                  "not compiled with the Intel compiler\n");
+  return (unsigned long)0;
+#endif
 }
