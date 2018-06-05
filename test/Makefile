@@ -37,12 +37,14 @@ sm_test:  ../dl_timer_lib.a ${TEST_UTILS} ${TEST_EXES}
 	./timer_test_omp.exe
 	./timer_test_omp_no_repeats.exe
 	./timer_test_granularity.exe
+	@echo "Shared-memory (non-MPI) tests complete!"
 
 .PHONY: dm_test
 dm_test: ../dl_timer_lib.a ${TEST_UTILS} ${DM_TEST_EXES}
 	mpirun -np 2 ./timer_test_mpi.exe
 	mpirun -np 2 ./timer_register_test_mpi.exe
 	mpirun -np 5 ./timer_test_mpi_comm_split.exe
+	@echo "Distributed-memory (MPI) tests complete!"
 
 .PHONY: clean
 clean:

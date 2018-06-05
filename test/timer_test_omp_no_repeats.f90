@@ -3,8 +3,6 @@ PROGRAM timer_test
   use dl_timer
   implicit none
 
-  integer, parameter :: r_def = KIND(1.0d0)
-
   integer :: time0, time1
   integer :: istep, j
   integer, parameter :: nstep = 1000
