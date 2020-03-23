@@ -21,10 +21,10 @@ module dl_timer_constants_mod
    INTEGER, PARAMETER :: ERR_UNIT = 6
 
    !> Maximum length of the label for a timed region
-   INTEGER, PARAMETER :: LABEL_LEN  = 50
+   INTEGER, PARAMETER :: LABEL_LEN  = 500
    !> Maximum number of distinct timed regions that an application
    !! may have 
-   INTEGER, PARAMETER :: MAX_TIMERS = 30
+   INTEGER, PARAMETER :: MAX_TIMERS = 300
    !> How many samples to keep when recording a time-line
    INTEGER, PARAMETER :: TIME_SERIES_LEN = 10000
 

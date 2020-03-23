@@ -17,19 +17,19 @@ LINK = ${F90} ${OMPFLAGS} ${LDFLAGS}
 TEST_UTILS = timer_test_utils_mod.o fsleep.o
 
 %.exe: %.o
-	${LINK} $< ../dl_timer_lib.a -o $@
+	${LINK} $< ../${LIB_NAME} -o $@
 
-timer_test_mpi.exe: ../dl_timer_lib.a timer_test_mpi.o
-	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_test_mpi.o ../dl_timer_lib.a -o $@
+timer_test_mpi.exe: ../${LIB_NAME} timer_test_mpi.o
+	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_test_mpi.o ../${LIB_NAME} -o $@
 
-timer_register_test_mpi.exe: ../dl_timer_lib.a timer_register_test_mpi.o
-	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_register_test_mpi.o ../dl_timer_lib.a -o $@
+timer_register_test_mpi.exe: ../${LIB_NAME} timer_register_test_mpi.o
+	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_register_test_mpi.o ../${LIB_NAME} -o $@
 
-timer_test_mpi_comm_split.exe: ../dl_timer_lib.a timer_test_mpi_comm_split.o
-	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_test_mpi_comm_split.o ${TEST_UTILS} ../dl_timer_lib.a -o $@
+timer_test_mpi_comm_split.exe: ../${LIB_NAME} timer_test_mpi_comm_split.o
+	${MPIF90} ${OMPFLAGS} ${LDFLAGS} timer_test_mpi_comm_split.o ${TEST_UTILS} ../${LIB_NAME} -o $@
 
 .PHONY: sm_test
-sm_test:  ../dl_timer_lib.a ${TEST_UTILS} ${TEST_EXES}
+sm_test:  ../${LIB_NAME} ${TEST_UTILS} ${TEST_EXES}
 	./timer_test.exe
 	./timer_invalid_rpts_test.exe
 	./timer_register_test.exe
@@ -40,7 +40,7 @@ sm_test:  ../dl_timer_lib.a ${TEST_UTILS} ${TEST_EXES}
 	@echo "Shared-memory (non-MPI) tests complete!"
 
 .PHONY: dm_test
-dm_test: ../dl_timer_lib.a ${TEST_UTILS} ${DM_TEST_EXES}
+dm_test: ../${LIB_NAME} ${TEST_UTILS} ${DM_TEST_EXES}
 	mpirun -np 2 ./timer_test_mpi.exe
 	mpirun -np 2 ./timer_register_test_mpi.exe
 	mpirun -np 5 ./timer_test_mpi_comm_split.exe
