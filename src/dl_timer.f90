@@ -188,7 +188,7 @@ CONTAINS
 
       case(POSIX_TIMER)
          if( posix_clock_init(clock_tick_s) /= 1)then
-            write (OUT_UNIT,"('TIMING: ERROR: dl_timer configured to use ' ,&
+            write (OUT_UNIT,"('TIMING: ERROR: dl_timer configured to use ', &
                           & 'POSIX timer but system does not support it.')")
             stop
          end if
